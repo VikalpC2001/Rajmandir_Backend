@@ -1,7 +1,8 @@
 const pool = require('../../database');
 const jwt = require("jsonwebtoken");
 const excelJS = require("exceljs");
-
+const { jsPDF } = require('jspdf');
+require('jspdf-autotable');
 
 // Function For Convert Units
 
@@ -150,153 +151,6 @@ const getStockOutList = async (req, res) => {
         res.status(500).json('Internal Server Error');
     }
 }
-
-// EXPORT Excel For StockOut List
-
-const exportExcelSheetForStockout = (req, res) => {
-
-    var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
-    var firstDay = new Date(y, m, 1).toString().slice(4, 15);
-    var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
-
-
-    const data = {
-        startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
-        endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
-        productId: req.query.productId
-    }
-    const sql_common_qurey = `SELECT
-                                  stockOutId,
-                                  CONCAT(
-                                      user_details.userFirstName,
-                                      ' ',
-                                      user_details.userLastName
-                                  ) AS outBy,
-                                  UPPER(inventory_product_data.productName) AS productName,
-                                  productQty,
-                                  productUnit,
-                                  ROUND(stockOutPrice) AS stockOutPrice,
-                                  inventory_stockOutCategory_data.stockOutCategoryName AS stockOutCategoryName,
-                                  stockOutComment,
-                                  DATE_FORMAT(stockOutDate, '%d-%m-%Y') AS stockOutDate
-                              FROM
-                                  inventory_stockOut_data
-                              INNER JOIN user_details ON user_details.userId = inventory_stockOut_data.userId
-                              INNER JOIN inventory_product_data ON inventory_product_data.productId = inventory_stockOut_data.productId
-                              INNER JOIN inventory_stockOutCategory_data ON inventory_stockOutCategory_data.stockOutCategoryId = inventory_stockOut_data.stockOutCategory`;
-    if (req.query.productId && req.query.startDate && req.query.endDate) {
-
-        sql_queries_getdetails = `${sql_common_qurey}
-                                    WHERE inventory_stockOut_data.productId = '${data.productId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                    ORDER BY inventory_stockOut_data.stockOutCreationDate DESC`;
-
-    } else if (req.query.startDate && req.query.endDate) {
-
-        sql_queries_getdetails = `${sql_common_qurey}
-                                   WHERE  inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                   ORDER BY inventory_stockOut_data.stockOutCreationDate DESC`;
-
-    } else if (req.query.productId) {
-
-        sql_queries_getdetails = `${sql_common_qurey}
-                                    WHERE inventory_stockOut_data.productId = '${data.productId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                    ORDER BY inventory_stockOut_data.stockOutCreationDate DESC`;
-
-    } else {
-        sql_queries_getdetails = `${sql_common_qurey}
-                                   WHERE  inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                   ORDER BY inventory_stockOut_data.stockOutCreationDate DESC`;
-    }
-
-    pool.query(sql_queries_getdetails, async (err, rows) => {
-        if (err) return res.status(404).send(err);
-        const workbook = new excelJS.Workbook();  // Create a new workbook
-        const worksheet = workbook.addWorksheet("StockOut List"); // New Worksheet
-
-        if (req.query.startDate && req.query.endDate) {
-            worksheet.mergeCells('A1', 'G1');
-            worksheet.getCell('A1').value = `Stock Out From ${data.startDate} To ${data.endDate}`;
-        } else {
-            worksheet.mergeCells('A1', 'G1');
-            worksheet.getCell('A1').value = `Stock Out From ${firstDay} To ${lastDay}`;
-        }
-
-        /*Column headers*/
-        worksheet.getRow(2).values = ['S no.', 'Out By', 'Product', 'Quantity', 'Unit', 'StockOut Price', 'Category', 'Comment', 'Date'];
-
-        // Column for data in excel. key must match data key
-        worksheet.columns = [
-            { key: "s_no", width: 10, },
-            { key: "outBy", width: 20 },
-            { key: "productName", width: 30 },
-            { key: "productQty", width: 10 },
-            { key: "productUnit", width: 10 },
-            { key: "stockOutPrice", width: 20 },
-            { key: "stockOutCategoryName", width: 20 },
-            { key: "stockOutComment", width: 30 },
-            { key: "stockOutDate", width: 20 },
-        ]
-        //Looping through User data
-        const arr = rows
-        console.log(">>>", arr);
-        let counter = 1;
-        arr.forEach((user) => {
-            user.s_no = counter;
-            worksheet.addRow(user); // Add data in worksheet
-            counter++;
-        });
-        // Making first line in excel bold
-        worksheet.getRow(1).eachCell((cell) => {
-            cell.font = { bold: true, size: 13 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            height = 200
-        });
-        worksheet.getRow(2).eachCell((cell) => {
-            cell.font = { bold: true, size: 13 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        });
-        worksheet.getRow(1).height = 30;
-        worksheet.getRow(2).height = 20;
-        if (req.query.productId || req.query.productId && req.query.startDate && req.query.endDate) {
-            worksheet.getRow(arr.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arr.length + 2})` }, '', { formula: `SUM(F3:F${arr.length + 2})` }];
-            worksheet.getRow(arr.length + 3).eachCell((cell) => {
-                cell.font = { bold: true, size: 14 }
-                cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            })
-        } else {
-            worksheet.getRow(arr.length + 3).values = ['Total:', '', '', '', '', { formula: `SUM(F3:F${arr.length + 2})` }];
-            worksheet.getRow(arr.length + 3).eachCell((cell) => {
-                cell.font = { bold: true, size: 14 }
-                cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            })
-        }
-        worksheet.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-            });
-        });
-        try {
-            const data = await workbook.xlsx.writeBuffer()
-            var fileName = new Date().toString().slice(4, 15) + ".xlsx";
-            console.log(">>>", fileName);
-            // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            // res.addHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename="+ fileName)
-            res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            res.type = 'blob';
-            res.send(data)
-            // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            // res.setHeader("Content-Disposition", "attachment; filename=" + "Report.xlsx");
-            // workbook.xlsx.write(res)
-            // .then((data)=>{
-            //     res.end();
-            //         console.log('File write done........');
-            //     });
-        } catch (err) {
-            throw new Error(err);
-        }
-    })
-};
 
 // Add StockOut API
 
@@ -846,7 +700,7 @@ const updateStockOutTransaction = async (req, res) => {
                             //     newData.productUnit = newData.productQty + ' ' + productUnit;
                             //     console.log('chavda else', newData);
                             // }
-                            console.log('parmar out', newData);
+                            // console.log('parmar out', newData);
                             if (updatedField == null || updatedField == '') {
                                 return res.status(500).send('No Change');
                             }
@@ -1550,352 +1404,6 @@ const getStockOutDataByCategory = (req, res) => {
     }
 }
 
-// Export Excel For Category Wise Used Product
-
-const exportCategoryWisedProductUsedData = (req, res) => {
-
-    var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
-    var firstDay = new Date(y, m, 1).toString().slice(4, 15);
-    var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
-
-    const data = {
-        startDate: req && req.query.startDate ? (req.query.startDate).slice(4, 15) : firstDay,
-        endDate: req && req.query.endDate ? (req.query.endDate).slice(4, 15) : lastDay,
-    }
-
-    console.log(">/>/>/>/>", data.startDate, data.endDate);
-
-    sql_queries_getdetails = `-- Generate dynamic columns for the pivot table
-                            SET @sql = NULL;
-                            SELECT GROUP_CONCAT(
-                                DISTINCT
-                                CONCAT(
-                                    'COALESCE(MAX(CASE WHEN so.productId = ''', p.productId,
-                                    ''' THEN so.usedQty END), 0) AS ',
-                                    QUOTE(CONCAT(p.productName, ' (', p.minProductUnit, ')'))
-                                )
-                            ) INTO @sql
-                            FROM inventory_product_data p;
-                                
-                            -- Define your date range here
-                            SET @startDate = STR_TO_DATE('${data.startDate}','%b %d %Y');
-                            SET @endDate = STR_TO_DATE('${data.endDate}','%b %d %Y');
-                                
-                            -- Generate the dynamic SQL statement for the pivot table
-                            SET @dynamicSQL = CONCAT('
-                                SELECT c.stockOutCategoryName AS "stockout Category", ', @sql, ', COALESCE(SUM(so.usedQty), 0) AS "Total"
-                                FROM inventory_stockOutCategory_data c
-                                LEFT JOIN (
-                                    SELECT so.stockOutCategory, so.productId, SUM(so.productQty) AS usedQty
-                                    FROM inventory_stockOut_data so
-                                    WHERE so.stockOutDate BETWEEN ? AND ? -- Apply the date range filter here
-                                    GROUP BY so.stockOutCategory, so.productId
-                                ) so ON c.stockOutCategoryId = so.stockOutCategory
-                                GROUP BY c.stockOutCategoryId, c.stockOutCategoryName
-                            ');
-                                
-                            -- Prepare and execute the dynamic SQL statement
-                            PREPARE stmt FROM @dynamicSQL;
-                            EXECUTE stmt USING @startDate, @endDate; -- Pass the date range as parameters
-                            DEALLOCATE PREPARE stmt;
-                            -- Generate dynamic columns for the pivot table
-                            SET @sql = NULL;
-                            SELECT GROUP_CONCAT(
-                                DISTINCT
-                                CONCAT(
-                                    'COALESCE(MAX(CASE WHEN so.productId = ''', p.productId,
-                                    ''' THEN so.usedQty END), 0) AS ',
-                                    QUOTE(CONCAT(p.productName, ' (', 'Rs.', ')'))
-                                )
-                            ) INTO @sql
-                            FROM inventory_product_data p;
-                                
-                            -- Define your date range here
-                            SET @startDate = STR_TO_DATE('${data.startDate}','%b %d %Y');
-                            SET @endDate = STR_TO_DATE('${data.endDate}','%b %d %Y');
-                                
-                            -- Generate the dynamic SQL statement for the pivot table
-                            SET @dynamicSQL = CONCAT('
-                                SELECT c.stockOutCategoryName AS "stockout Category", ', @sql, ', COALESCE(SUM(so.usedQty), 0) AS "Total"
-                                FROM inventory_stockOutCategory_data c
-                                LEFT JOIN (
-                                    SELECT so.stockOutCategory, so.productId, SUM(so.stockOutPrice) AS usedQty
-                                    FROM inventory_stockOut_data so
-                                    WHERE so.stockOutDate BETWEEN ? AND ? -- Apply the date range filter here
-                                    GROUP BY so.stockOutCategory, so.productId
-                                ) so ON c.stockOutCategoryId = so.stockOutCategory
-                                GROUP BY c.stockOutCategoryId, c.stockOutCategoryName
-                            ');
-                                
-                            -- Prepare and execute the dynamic SQL statement
-                            PREPARE stmt FROM @dynamicSQL;
-                            EXECUTE stmt USING @startDate, @endDate; -- Pass the date range as parameters
-                            DEALLOCATE PREPARE stmt;`;
-
-    pool.query(sql_queries_getdetails, async (err, rows) => {
-        if (err) return res.status(404).send(err);
-        console.log("::::::::::;;;;;;;;;;;;", rows[1])
-        const workbook = new excelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Stock Out Used Qty Transpoted');
-        const priceWorkSheet = workbook.addWorksheet('Stock Out Used Price Transpoted');
-        const transposedWorksheet = workbook.addWorksheet('Stock Out Used Qty');
-        const transposedpriceWorkSheetPrice = workbook.addWorksheet('Stock Out Used Price');
-
-        workbook.getWorksheet(1).state = 'veryHidden';
-        workbook.getWorksheet(2).state = 'veryHidden';
-
-        const abs = rows[6];
-        const headerName = rows[6][0];
-        console.log("><><>", Object.keys(headerName).map(key => key.toUpperCase()));
-        const headersName = Object.keys(headerName).map(key => key.toUpperCase());
-        // Create the headers row
-        const headersRow = headersName;
-        console.log('headName', headersRow);
-        worksheet.addRow(headersRow);
-
-        // Populate the worksheet with data
-        abs.forEach((row) => {
-            const dataRow = [...Object.values(row)];
-            worksheet.addRow(dataRow);
-        });
-
-        // Calculate the total for each column
-        const totalRow = [];
-        worksheet.columns.forEach((column, columnIndex) => {
-            let columnTotal = 0;
-            column.eachCell({ includeEmpty: true }, (cell, rowNumber) => {
-                // Skip the header row
-                if (rowNumber !== 1) {
-                    const value = parseFloat(cell.value) || 0;
-                    columnTotal += value;
-                }
-            });
-            totalRow.push(columnTotal);
-            // Check if it's the last column and apply styling
-            if (columnIndex === worksheet.columns.length - 1) {
-                // Example styling to highlight the last column
-                column.eachCell((cell) => {
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FFC6EFCE' }, // Red fill color
-                    };
-                    cell.font = {
-                        bold: true,
-                        size: 12, // Set the font size
-                    };
-                });
-            }
-        });
-
-        totalRow[0] = "Total";
-        // Add the total row to the worksheet
-        const totalRowCell = worksheet.addRow(totalRow);
-        totalRowCell.eachCell((cell) => {
-            cell.font = { bold: true, color: { theme: 12 } }; // Set the font of the total row cells to bold
-        });
-
-        totalRowCell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFC6EFCE' },
-        };
-
-        worksheet.getRow(1).eachCell((cell) => {
-            cell.font = { bold: true, size: 11 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            height = 300
-        });
-
-        worksheet.columns.forEach((column) => {
-            let maxLength = 0;
-            column.eachCell({ includeEmpty: true }, (cell) => {
-                const columnLength = cell.value ? String(cell.value).length : 0;
-                if (columnLength > maxLength) {
-                    maxLength = columnLength;
-                }
-            });
-            column.width = maxLength < 10 ? 12 : maxLength;
-        });
-
-        worksheet.getColumn(1).eachCell((cell) => {
-            cell.font = { bold: true };
-        });
-
-        worksheet.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' },
-                };
-            });
-        });
-
-
-        // Transpose the data from the original worksheet to the transposed worksheet
-        for (let row = 1; row <= worksheet.rowCount; row++) {
-            for (let col = 1; col <= worksheet.columnCount; col++) {
-                const cell = worksheet.getCell(row, col);
-                const transposedCell = transposedWorksheet.getCell(col, row);
-                transposedCell.value = cell.value;
-                transposedCell.style = Object.assign({}, cell.style); // Copy cell styles
-            }
-        }
-
-        transposedWorksheet.columns.forEach((column) => {
-            let maxLength = 0;
-            column.eachCell({ includeEmpty: true }, (cell) => {
-                const columnLength = cell.value ? String(cell.value).length : 0;
-                if (columnLength > maxLength) {
-                    maxLength = columnLength;
-                }
-            });
-            column.width = maxLength < 10 ? 12 : maxLength;
-        });
-
-        transposedWorksheet.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-            });
-        });
-
-        const absPrice = rows[14];
-        const headerNamePrice = rows[14][0];
-        console.log(rows[14]);
-        // console.log("><><>", Object.keys(headerNamePrice).map(key => key.toUpperCase()));
-        const headersNamePrice = Object.keys(headerNamePrice).map(key => key.toUpperCase());
-        // Create the headers row
-        const headersRowPrice = headersNamePrice;
-        console.log('headName', headersRowPrice);
-        priceWorkSheet.addRow(headersRowPrice);
-
-        // Populate the priceWorkSheet with data
-        absPrice.forEach((row) => {
-            const dataRow = [...Object.values(row)];
-            priceWorkSheet.addRow(dataRow);
-        });
-
-        // Calculate the total for each column
-        const totalRowPrice = [];
-        priceWorkSheet.columns.forEach((column, columnIndex) => {
-            let columnTotal = 0;
-            column.eachCell({ includeEmpty: true }, (cell, rowNumber) => {
-                // Skip the header row
-                if (rowNumber !== 1) {
-                    const value = parseFloat(cell.value) || 0;
-                    columnTotal += value;
-                }
-            });
-            totalRowPrice.push(columnTotal);
-            // Check if it's the last column and apply styling
-            if (columnIndex === worksheet.columns.length - 1) {
-                // Example styling to highlight the last column
-                column.eachCell((cell) => {
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FFC6EFCE' }, // Red fill color
-                    };
-                    cell.font = {
-                        bold: true,
-                        size: 12, // Set the font size
-                    };
-                });
-            }
-        });
-
-        totalRowPrice[0] = "Total";
-        // Add the total row to the priceWorkSheet
-        const totalRowPriceCellPrice = priceWorkSheet.addRow(totalRowPrice);
-        totalRowPriceCellPrice.eachCell((cell) => {
-            cell.font = { bold: true, color: { theme: 12 } }; // Set the font of the total row cells to bold
-        });
-
-        totalRowPriceCellPrice.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFC6EFCE' },
-        };
-
-        priceWorkSheet.getRow(1).eachCell((cell) => {
-            cell.font = { bold: true, size: 11 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            height = 300
-        });
-
-        priceWorkSheet.columns.forEach((column) => {
-            let maxLength = 0;
-            column.eachCell({ includeEmpty: true }, (cell) => {
-                const columnLength = cell.value ? String(cell.value).length : 0;
-                if (columnLength > maxLength) {
-                    maxLength = columnLength;
-                }
-            });
-            column.width = maxLength < 10 ? 12 : maxLength;
-        });
-
-        priceWorkSheet.getColumn(1).eachCell((cell) => {
-            cell.font = { bold: true };
-        });
-
-        priceWorkSheet.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' },
-                };
-            });
-        });
-
-        // Transpose the data from the original priceWorkSheet to the transposed priceWorkSheet
-        for (let row = 1; row <= priceWorkSheet.rowCount; row++) {
-            for (let col = 1; col <= priceWorkSheet.columnCount; col++) {
-                const cell = priceWorkSheet.getCell(row, col);
-                const transposedCell = transposedpriceWorkSheetPrice.getCell(col, row);
-                transposedCell.value = cell.value;
-                transposedCell.style = Object.assign({}, cell.style); // Copy cell styles
-            }
-        }
-
-        transposedpriceWorkSheetPrice.columns.forEach((column) => {
-            let maxLength = 0;
-            column.eachCell({ includeEmpty: true }, (cell) => {
-                const columnLength = cell.value ? String(cell.value).length : 0;
-                if (columnLength > maxLength) {
-                    maxLength = columnLength;
-                }
-            });
-            column.width = maxLength < 10 ? 12 : maxLength;
-        });
-
-        transposedpriceWorkSheetPrice.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-            });
-        });
-
-        try {
-            const data = await workbook.xlsx.writeBuffer()
-            var fileName = new Date().toString().slice(4, 15) + ".xlsx";
-            res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            res.type = 'blob';
-            res.send(data)
-        } catch (err) {
-            throw new Error(err);
-        }
-    })
-};
-
 // To Get All Stock Out Data For Add
 
 const getAllStockOutTransaction = (req, res) => {
@@ -1926,130 +1434,526 @@ const getAllStockOutTransaction = (req, res) => {
 // Export Excel For Stock Out Data By Category Id
 
 const exportExcelSheetForStockOutDataByCategoryId = (req, res) => {
-    const currentDate = new Date();
-    const FirestDate = currentDate.setMonth(currentDate.getMonth() - 1);
-    console.log(FirestDate, currentDate);
-    var firstDay = new Date().toString().slice(4, 15);
-    var lastDay = new Date(FirestDate).toString().slice(4, 15);
-    console.log(firstDay, lastDay);
-    const data = {
-        startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
-        endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
-        categoryId: req.query.categoryId
-    }
+    let token;
+    token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+    if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+        if (branchId) {
+            const currentDate = new Date();
+            const FirestDate = currentDate.setMonth(currentDate.getMonth() - 1);
+            console.log(FirestDate, currentDate);
+            var firstDay = new Date().toString().slice(4, 15);
+            var lastDay = new Date(FirestDate).toString().slice(4, 15);
+            console.log(firstDay, lastDay);
+            const data = {
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                categoryId: req.query.categoryId
+            }
 
-    const commonQuery1 = `SELECT
-                            stockOutId,
-                            CONCAT(
-                                user_details.userFirstName,
-                                ' ',
-                                user_details.userLastName
-                            ) AS outBy,
-                            UPPER(inventory_product_data.productName) AS productName,
-                            productQty,
-                            productUnit,
-                            ROUND(stockOutPrice) AS stockOutPrice,
-                            inventory_stockOutCategory_data.stockOutCategoryName AS stockOutCategoryName,
-                            stockOutComment,
-                            DATE_FORMAT(stockOutDate, '%d-%m-%Y') AS stockOutDate,
-                             DATE_FORMAT(stockOutCreationDate, '%h:%i:%s %p') AS stockOutTime
-                        FROM inventory_stockOut_data
-                        INNER JOIN user_details ON user_details.userId = inventory_stockOut_data.userId
-                        INNER JOIN inventory_product_data ON inventory_product_data.productId = inventory_stockOut_data.productId
-                        INNER JOIN inventory_stockOutCategory_data ON inventory_stockOutCategory_data.stockOutCategoryId = inventory_stockOut_data.stockOutCategory`;
-    if (req.query.startDate && req.query.endDate) {
+            const commonQuery1 = `SELECT
+                                      stockOutId,
+                                      CONCAT(
+                                          user_details.userFirstName,
+                                          ' ',
+                                          user_details.userLastName
+                                      ) AS outBy,
+                                      UPPER(inventory_product_data.productName) AS productName,
+                                      stockOutDisplayQty AS productQty,
+                                      stockOutDisplayUnit AS productUnit,
+                                      ROUND(stockOutPrice) AS stockOutPrice,
+                                      inventory_stockOutCategory_data.stockOutCategoryName AS stockOutCategoryName,
+                                      stockOutComment,
+                                      DATE_FORMAT(stockOutDate, '%d-%m-%Y') AS stockOutDate,
+                                      DATE_FORMAT(stockOutCreationDate, '%h:%i:%s %p') AS stockOutTime
+                                  FROM inventory_stockOut_data
+                                  INNER JOIN user_details ON user_details.userId = inventory_stockOut_data.userId
+                                  INNER JOIN inventory_product_data ON inventory_product_data.productId = inventory_stockOut_data.productId
+                                  INNER JOIN inventory_stockOutCategory_data ON inventory_stockOutCategory_data.stockOutCategoryId = inventory_stockOut_data.stockOutCategory`;
+            if (req.query.startDate && req.query.endDate) {
 
-        sql_queries_getdetails = `${commonQuery1}
-                                                WHERE inventory_stockOut_data.stockOutCategory = '${data.categoryId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                                ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+                sql_queries_getdetails = `${commonQuery1}
+                                    WHERE inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutCategory = '${data.categoryId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                    ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
 
-    } else {
-        sql_queries_getdetails = `${commonQuery1}
-                                                WHERE inventory_stockOut_data.stockOutCategory = '${data.categoryId}' AND inventory_stockOut_data.stockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND inventory_stockOut_data.stockOutDate <= CURDATE()
-                                                ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
-    }
+            } else {
+                sql_queries_getdetails = `${commonQuery1}
+                                    WHERE inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutCategory = '${data.categoryId}' AND inventory_stockOut_data.stockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND inventory_stockOut_data.stockOutDate <= CURDATE()
+                                    ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+            }
 
-    pool.query(sql_queries_getdetails, async (err, rows) => {
-        if (err) return res.status(404).send(err);
-        const workbook = new excelJS.Workbook();  // Create a new workbook
-        const worksheet = workbook.addWorksheet("Bonus List"); // New Worksheet
+            pool.query(sql_queries_getdetails, async (err, rows) => {
+                if (err) return res.status(404).send(err);
+                const workbook = new excelJS.Workbook();  // Create a new workbook
+                const worksheet = workbook.addWorksheet("Bonus List"); // New Worksheet
 
-        if (req.query.startDate && req.query.endDate) {
-            worksheet.mergeCells('A1', 'I1');
-            worksheet.getCell('A1').value = `Stock Out For ${rows[0].stockOutCategoryName.toUpperCase()}  :-  From ${data.startDate} To ${data.endDate}`;
+                if (req.query.startDate && req.query.endDate) {
+                    worksheet.mergeCells('A1', 'I1');
+                    worksheet.getCell('A1').value = `Stock Out For ${rows[0].stockOutCategoryName.toUpperCase()}  :-  From ${data.startDate} To ${data.endDate}`;
+                } else {
+                    worksheet.mergeCells('A1', 'I1');
+                    worksheet.getCell('A1').value = `Stock Out For ${rows[0].stockOutCategoryName.toUpperCase()}  :-  From ${lastDay} To ${firstDay}`;
+                }
+
+                /*Column headers*/
+                worksheet.getRow(2).values = ['S no.', 'Out By', 'Product', 'Quantity', 'Unit', 'StockOut Price', 'Comment', 'Date', 'Time'];
+
+                // Column for data in excel. key must match data key
+                worksheet.columns = [
+                    { key: "s_no", width: 10, },
+                    { key: "outBy", width: 20 },
+                    { key: "productName", width: 30 },
+                    { key: "productQty", width: 10 },
+                    { key: "productUnit", width: 10 },
+                    { key: "stockOutPrice", width: 20 },
+                    { key: "stockOutComment", width: 30 },
+                    { key: "stockOutDate", width: 20 },
+                    { key: "stockOutTime", width: 20 }
+                ]
+                //Looping through User data
+                const arr = rows
+                console.log(">>>", arr);
+                let counter = 1;
+                arr.forEach((user) => {
+                    user.s_no = counter;
+                    worksheet.addRow(user); // Add data in worksheet
+                    counter++;
+                });
+                // Making first line in excel bold
+                worksheet.getRow(1).eachCell((cell) => {
+                    cell.font = { bold: true, size: 13 }
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                    height = 200
+                });
+                worksheet.getRow(2).eachCell((cell) => {
+                    cell.font = { bold: true, size: 13 }
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                });
+                worksheet.getRow(1).height = 30;
+                worksheet.getRow(2).height = 20;
+
+                worksheet.getRow(arr.length + 3).values = [
+                    'Total:',
+                    '',
+                    '',
+                    '',
+                    '',
+                    { formula: `SUM(F3:F${arr.length + 2})` }
+                ];
+                worksheet.getRow(arr.length + 3).eachCell((cell) => {
+                    cell.font = { bold: true, size: 14 }
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                })
+
+                worksheet.eachRow((row) => {
+                    row.eachCell((cell) => {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        row.height = 20
+                    });
+                });
+                try {
+                    const data = await workbook.xlsx.writeBuffer()
+                    var fileName = new Date().toString().slice(4, 15) + ".xlsx";
+                    console.log(">>>", fileName);
+                    res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    res.type = 'blob';
+                    res.send(data)
+                } catch (err) {
+                    throw new Error(err);
+                }
+            })
         } else {
-            worksheet.mergeCells('A1', 'I1');
-            worksheet.getCell('A1').value = `Stock Out For ${rows[0].stockOutCategoryName.toUpperCase()}  :-  From ${lastDay} To ${firstDay}`;
+            return res.status(401).send("BranchId Not Found");
         }
-
-        /*Column headers*/
-        worksheet.getRow(2).values = ['S no.', 'Out By', 'Product', 'Quantity', 'Unit', 'StockOut Price', 'Comment', 'Date', 'Time'];
-
-        // Column for data in excel. key must match data key
-        worksheet.columns = [
-            { key: "s_no", width: 10, },
-            { key: "outBy", width: 20 },
-            { key: "productName", width: 30 },
-            { key: "productQty", width: 10 },
-            { key: "productUnit", width: 10 },
-            { key: "stockOutPrice", width: 20 },
-            { key: "stockOutComment", width: 30 },
-            { key: "stockOutDate", width: 20 },
-            { key: "stockOutTime", width: 20 }
-        ]
-        //Looping through User data
-        const arr = rows
-        console.log(">>>", arr);
-        let counter = 1;
-        arr.forEach((user) => {
-            user.s_no = counter;
-            worksheet.addRow(user); // Add data in worksheet
-            counter++;
-        });
-        // Making first line in excel bold
-        worksheet.getRow(1).eachCell((cell) => {
-            cell.font = { bold: true, size: 13 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            height = 200
-        });
-        worksheet.getRow(2).eachCell((cell) => {
-            cell.font = { bold: true, size: 13 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        });
-        worksheet.getRow(1).height = 30;
-        worksheet.getRow(2).height = 20;
-
-        worksheet.getRow(arr.length + 3).values = [
-            'Total:',
-            '',
-            '',
-            '',
-            '',
-            { formula: `SUM(F3:F${arr.length + 2})` }
-        ];
-        worksheet.getRow(arr.length + 3).eachCell((cell) => {
-            cell.font = { bold: true, size: 14 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        })
-
-        worksheet.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-            });
-        });
-        try {
-            const data = await workbook.xlsx.writeBuffer()
-            var fileName = new Date().toString().slice(4, 15) + ".xlsx";
-            console.log(">>>", fileName);
-            res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            res.type = 'blob';
-            res.send(data)
-        } catch (err) {
-            throw new Error(err);
-        }
-    })
+    } else {
+        return res.status(401).send("Please Login Firest.....!");
+    }
 };
+
+// EXPORT Excel For StockOut List
+
+const exportExcelSheetForStockout = (req, res) => {
+    let token;
+    token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+    if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+        if (branchId) {
+            var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+            var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+            var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+            const data = {
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                productId: req.query.productId
+            }
+            const commonQuery = `SELECT stockOutId, user_details.userName AS outBy, CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS userName,inventory_product_data.productName AS productName, stockOutDisplayQty AS productQty, stockOutDisplayUnit AS productUnit, ROUND(stockOutPrice) AS stockOutPrice, inventory_stockOutCategory_data.stockOutCategoryName AS stockOutCategoryName, stockOutComment, CONCAT(DATE_FORMAT(stockOutDate,'%d-%m-%Y'),' ',DATE_FORMAT(stockOutCreationDate, '%h:%i:%s %p')) AS stockOutDate 
+                                 FROM inventory_stockOut_data
+                                 INNER JOIN user_details ON user_details.userId = inventory_stockOut_data.userId
+                                 INNER JOIN inventory_product_data ON inventory_product_data.productId = inventory_stockOut_data.productId
+                                 INNER JOIN inventory_stockOutCategory_data ON inventory_stockOutCategory_data.stockOutCategoryId = inventory_stockOut_data.stockOutCategory`;
+            if (req.query.productId && req.query.startDate && req.query.endDate) {
+                sql_queries_getdetails = `${commonQuery}
+                                                WHERE inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.productId = '${data.productId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+            } else if (req.query.startDate && req.query.endDate) {
+                sql_queries_getdetails = `${commonQuery}
+                                                WHERE inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+            } else if (req.query.productId) {
+                sql_queries_getdetails = `${commonQuery}
+                                                WHERE inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.productId = '${data.productId}'
+                                                ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+            } else {
+                sql_queries_getdetails = `${commonQuery}
+                                                WHERE inventory_stockOut_data.branchId = '${branchId}'
+                                                ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+            }
+
+            pool.query(sql_queries_getdetails, async (err, rows) => {
+                if (err) return res.status(404).send(err);
+                const workbook = new excelJS.Workbook();  // Create a new workbook
+                const worksheet = workbook.addWorksheet("StockOut List"); // New Worksheet
+
+                if (req.query.startDate && req.query.endDate) {
+                    worksheet.mergeCells('A1', 'G1');
+                    worksheet.getCell('A1').value = `Stock Out From ${data.startDate} To ${data.endDate}`;
+                } else {
+                    worksheet.mergeCells('A1', 'G1');
+                    worksheet.getCell('A1').value = `Stock Out From ${firstDay} To ${lastDay}`;
+                }
+
+                /*Column headers*/
+                worksheet.getRow(2).values = ['S no.', 'Out By', 'Product', 'Quantity', 'Unit', 'StockOut Price', 'Category', 'Comment', 'Date'];
+
+                // Column for data in excel. key must match data key
+                worksheet.columns = [
+                    { key: "s_no", width: 10, },
+                    { key: "outBy", width: 20 },
+                    { key: "productName", width: 30 },
+                    { key: "productQty", width: 10 },
+                    { key: "productUnit", width: 10 },
+                    { key: "stockOutPrice", width: 20 },
+                    { key: "stockOutCategoryName", width: 20 },
+                    { key: "stockOutComment", width: 30 },
+                    { key: "stockOutDate", width: 20 },
+                ]
+                //Looping through User data
+                const arr = rows
+                console.log(">>>", arr);
+                let counter = 1;
+                arr.forEach((user) => {
+                    user.s_no = counter;
+                    worksheet.addRow(user); // Add data in worksheet
+                    counter++;
+                });
+                // Making first line in excel bold
+                worksheet.getRow(1).eachCell((cell) => {
+                    cell.font = { bold: true, size: 13 }
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                    height = 200
+                });
+                worksheet.getRow(2).eachCell((cell) => {
+                    cell.font = { bold: true, size: 13 }
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                });
+                worksheet.getRow(1).height = 30;
+                worksheet.getRow(2).height = 20;
+                if (req.query.productId || req.query.productId && req.query.startDate && req.query.endDate) {
+                    worksheet.getRow(arr.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arr.length + 2})` }, '', { formula: `SUM(F3:F${arr.length + 2})` }];
+                    worksheet.getRow(arr.length + 3).eachCell((cell) => {
+                        cell.font = { bold: true, size: 14 }
+                        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                    })
+                } else {
+                    worksheet.getRow(arr.length + 3).values = ['Total:', '', '', '', '', { formula: `SUM(F3:F${arr.length + 2})` }];
+                    worksheet.getRow(arr.length + 3).eachCell((cell) => {
+                        cell.font = { bold: true, size: 14 }
+                        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                    })
+                }
+                worksheet.eachRow((row) => {
+                    row.eachCell((cell) => {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        row.height = 20
+                    });
+                });
+                try {
+                    const data = await workbook.xlsx.writeBuffer()
+                    var fileName = new Date().toString().slice(4, 15) + ".xlsx";
+                    console.log(">>>", fileName);
+                    // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                    // res.addHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename="+ fileName)
+                    res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    res.type = 'blob';
+                    res.send(data)
+                    // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                    // res.setHeader("Content-Disposition", "attachment; filename=" + "Report.xlsx");
+                    // workbook.xlsx.write(res)
+                    // .then((data)=>{
+                    //     res.end();
+                    //         console.log('File write done........');
+                    //     });
+                } catch (err) {
+                    throw new Error(err);
+                }
+            })
+        } else {
+            return res.status(401).send("BranchId Not Found");
+        }
+    } else {
+        return res.status(401).send("Please Login Firest.....!");
+    }
+};
+
+// Export PDF Function
+
+async function createPDF(res, datas, sumFooterArray, tableHeading) {
+    try {
+        // Create a new PDF document
+        console.log(';;;;;;', datas);
+        console.log('?????', sumFooterArray);
+        console.log('?????', tableHeading);
+        const doc = new jsPDF();
+
+        // JSON data
+        const jsonData = datas;
+        // console.log(jsonData);
+
+        // Get the keys from the first JSON object to set as columns
+        const keys = Object.keys(jsonData[0]);
+
+        // Define columns for the auto table, including a "Serial No." column
+        const columns = [
+            { header: 'Sr.', dataKey: 'serialNo' }, // Add Serial No. column
+            ...keys.map(key => ({ header: key, dataKey: key }))
+        ]
+
+        // Convert JSON data to an array of arrays (table rows) and add a serial number
+        const data = jsonData.map((item, index) => [index + 1, ...keys.map(key => item[key]), '', '']);
+
+        // Initialize the sum columns with empty strings
+        if (sumFooterArray) {
+            data.push(sumFooterArray);
+        }
+
+        // Add auto table to the PDF document
+        doc.text(15, 15, tableHeading);
+        doc.autoTable({
+            startY: 20,
+            head: [columns.map(col => col.header)], // Extract headers correctly
+            body: data,
+            theme: 'grid',
+            styles: {
+                cellPadding: 2, // Add padding to cells for better appearance
+                halign: 'center', // Horizontally center-align content
+                fontSize: 10
+            },
+        });
+
+        const pdfBytes = await doc.output();
+        const fileName = 'jane-doe.pdf'; // Set the desired file name
+
+        // Set the response headers for the PDF download
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Type', 'application/pdf');
+
+        // Stream the PDF to the client for download
+        res.send(pdfBytes);
+
+
+        // Save the PDF to a file
+        // const pdfFilename = 'output.pdf';
+        // fs.writeFileSync(pdfFilename, doc.output());
+        // console.log(`PDF saved as ${pdfFilename}`);
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Export PDF For StockIn
+
+const exportPdfForStockOut = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+            if (branchId) {
+                var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+                var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+                var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+                const data = {
+                    startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                    endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                    productId: req.query.productId
+                }
+                const commonQuery = `SELECT 
+                                            CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS "Out By",
+                                            inventory_product_data.productName AS "Product", 
+                                            CONCAT(stockOutDisplayQty,' ',stockOutDisplayUnit) AS "Qty",
+                                            ROUND(stockOutPrice) AS "Out Price", 
+                                            inventory_stockOutCategory_data.stockOutCategoryName AS "Category", 
+                                            stockOutComment, CONCAT(DATE_FORMAT(stockOutDate,'%d-%m-%Y'),' ',DATE_FORMAT(stockOutCreationDate, '%h:%i:%s %p')) AS "Date" 
+                                 FROM inventory_stockOut_data
+                                 INNER JOIN user_details ON user_details.userId = inventory_stockOut_data.userId
+                                 INNER JOIN inventory_product_data ON inventory_product_data.productId = inventory_stockOut_data.productId
+                                 INNER JOIN inventory_stockOutCategory_data ON inventory_stockOutCategory_data.stockOutCategoryId = inventory_stockOut_data.stockOutCategory`;
+                if (req.query.productId && req.query.startDate && req.query.endDate) {
+                    sql_queries_getdetails = `${commonQuery}
+                                                WHERE inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.productId = '${data.productId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+                } else if (req.query.startDate && req.query.endDate) {
+                    sql_queries_getdetails = `${commonQuery}
+                                                WHERE inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+                } else if (req.query.productId) {
+                    sql_queries_getdetails = `${commonQuery}
+                                                WHERE inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.productId = '${data.productId}'
+                                                ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+                } else {
+                    sql_queries_getdetails = `${commonQuery}
+                                                WHERE inventory_stockOut_data.branchId = '${branchId}'
+                                                ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`
+                }
+                pool.query(sql_queries_getdetails, (err, rows) => {
+                    if (err) {
+                        console.error("An error occurd in SQL Queery", err);
+                        return res.status(500).send('Database Error');
+                    } else if (rows && rows.length <= 0) {
+                        return res.status(400).send('No Data Found');
+                    }
+                    const abc = Object.values(JSON.parse(JSON.stringify(rows)));
+                    const sumPayAmount = abc.reduce((total, item) => total + (item['Out Price'] || 0), 0);
+                    const sumFooterArray = ['Total', '', '', '', parseFloat(sumPayAmount).toLocaleString('en-IN')];
+                    if (req.query.startMonth && req.query.endMonth) {
+                        const startMonthName = formatMonthYear(startMonth);
+                        console.log(startMonthName);
+                        const endMonthName = formatMonthYear(endMonth);
+                        console.log(endMonthName);
+                        tableHeading = `Stock Out Data From ${startMonthName} To ${endMonthName}`;
+                    } else {
+                        tableHeading = `All Stock Out Data`;
+                    }
+
+                    createPDF(res, abc, sumFooterArray, tableHeading)
+                        .then(() => {
+                            console.log('PDF created successfully');
+                            res.status(200);
+                        })
+                        .catch((err) => {
+                            console.log(err);
+                            res.status(500).send('Error creating PDF');
+                        });
+                });
+            } else {
+                return res.status(401).send("BranchId Not Found");
+            }
+        } else {
+            return res.status(401).send("Please Login Firest.....!");
+        }
+
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
+// Export PDF Stock Out Category Wise
+
+const exportPdfForStockOutDataByCategoryId = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+            if (branchId) {
+                const currentDate = new Date();
+                const FirestDate = currentDate.setMonth(currentDate.getMonth() - 1);
+                console.log(FirestDate, currentDate);
+                var firstDay = new Date().toString().slice(4, 15);
+                var lastDay = new Date(FirestDate).toString().slice(4, 15);
+                console.log(firstDay, lastDay);
+                const data = {
+                    startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                    endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                    categoryId: req.query.categoryId
+                }
+                const commonQuery1 = `SELECT
+                                      CONCAT(
+                                          user_details.userFirstName,
+                                          ' ',
+                                          user_details.userLastName
+                                      ) AS "Out By",
+                                      UPPER(inventory_product_data.productName) AS "Product Name",
+                                      CONCAT(stockOutDisplayQty,' ',stockOutDisplayUnit) AS "Qty",
+                                      ROUND(stockOutPrice) AS "Out Price",
+                                      inventory_stockOutCategory_data.stockOutCategoryName AS "Category",
+                                      stockOutComment AS "Comment",
+                                      DATE_FORMAT(stockOutDate, '%d-%m-%Y') AS "Date",
+                                      DATE_FORMAT(stockOutCreationDate, '%h:%i:%s %p') AS "Time"
+                                  FROM inventory_stockOut_data
+                                  INNER JOIN user_details ON user_details.userId = inventory_stockOut_data.userId
+                                  INNER JOIN inventory_product_data ON inventory_product_data.productId = inventory_stockOut_data.productId
+                                  INNER JOIN inventory_stockOutCategory_data ON inventory_stockOutCategory_data.stockOutCategoryId = inventory_stockOut_data.stockOutCategory`;
+                if (req.query.startDate && req.query.endDate) {
+                    sql_queries_getdetails = `${commonQuery1}
+                                    WHERE inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutCategory = '${data.categoryId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                    ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+
+                } else {
+                    sql_queries_getdetails = `${commonQuery1}
+                                    WHERE inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutCategory = '${data.categoryId}' AND inventory_stockOut_data.stockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND inventory_stockOut_data.stockOutDate <= CURDATE()
+                                    ORDER BY inventory_stockOut_data.stockOutDate DESC, inventory_stockOut_data.stockOutCreationDate DESC`;
+                }
+                pool.query(sql_queries_getdetails, (err, rows) => {
+                    if (err) {
+                        console.error("An error occurd in SQL Queery", err);
+                        return res.status(500).send('Database Error');
+                    } else if (rows && rows.length <= 0) {
+                        return res.status(400).send('No Data Found');
+                    }
+                    const abc = Object.values(JSON.parse(JSON.stringify(rows)));
+                    const sumPayAmount = abc.reduce((total, item) => total + (item['Out Price'] || 0), 0);
+                    const sumFooterArray = ['Total', '', '', '', parseFloat(sumPayAmount).toLocaleString('en-IN')];
+                    if (req.query.startMonth && req.query.endMonth) {
+                        const startMonthName = formatMonthYear(startMonth);
+                        console.log(startMonthName);
+                        const endMonthName = formatMonthYear(endMonth);
+                        console.log(endMonthName);
+                        tableHeading = `Stock Out Data From ${startMonthName} To ${endMonthName}`;
+                    } else {
+                        tableHeading = `All Stock Out Data`;
+                    }
+
+                    createPDF(res, abc, sumFooterArray, tableHeading)
+                        .then(() => {
+                            console.log('PDF created successfully');
+                            res.status(200);
+                        })
+                        .catch((err) => {
+                            console.log(err);
+                            res.status(500).send('Error creating PDF');
+                        });
+                });
+            } else {
+                return res.status(401).send("BranchId Not Found");
+            }
+        } else {
+            return res.status(401).send("Please Login Firest.....!");
+        }
+
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
 
 module.exports = {
     addStockOutDetails,
@@ -2060,8 +1964,9 @@ module.exports = {
     exportExcelSheetForStockout,
     getUpdateStockOutList,
     getUpdateStockOutListById,
-    exportCategoryWisedProductUsedData,
     getAllStockOutTransaction,
     getStockOutDataByCategory,
-    exportExcelSheetForStockOutDataByCategoryId
+    exportExcelSheetForStockOutDataByCategoryId,
+    exportPdfForStockOut,
+    exportPdfForStockOutDataByCategoryId
 }

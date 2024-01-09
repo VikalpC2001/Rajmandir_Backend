@@ -11,7 +11,7 @@ const ddlProduct = (req, res) => {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
             if (branchId) {
-                const sql_querry_getddlProduct = `SELECT p.productId, UCASE(p.productName) AS productName, p.minProductUnit AS productUnit,
+                const sql_querry_getddlProduct = `SELECT p.productId, UCASE(p.productName) AS productName, p.minProductUnit AS minProductUnit,
                                                 COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS remainingStock
                                             FROM
                                                 inventory_product_data AS p
@@ -44,7 +44,6 @@ const ddlProduct = (req, res) => {
                         return res.status(500).send('Database Error');
                     }
                     const datas = Object.values(JSON.parse(JSON.stringify(result)));
-
                     processDatas(datas)
                         .then((data) => {
                             console.log('json 1', datas);

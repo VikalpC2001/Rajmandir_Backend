@@ -129,5 +129,6 @@ function newConversationAsync(qty, id, baseUnit) {
 
 module.exports = {
     processDatas,
-    newConversationAsync
+    newConversationAsync,
+    computeConversionFactors
 }

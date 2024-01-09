@@ -1,8 +1,12 @@
 const pool = require('../../database');
 const excelJS = require("exceljs");
 const jwt = require("jsonwebtoken");
+const { jsPDF } = require('jspdf');
+require('jspdf-autotable');
 const { processDatas } = require("../inventoryController/conversation.controller");
 const { newConversationAsync } = require("../inventoryController/conversation.controller");
+const { computeConversionFactors } = require("../inventoryController/conversation.controller");
+
 
 // Get Product Counter Details
 
@@ -515,13 +519,13 @@ const getProductListCounter = (req, res) => {
 
 const addProduct = async (req, res) => {
     try {
-
         const uid1 = new Date();
         const productId = String("product_" + uid1.getTime());
         const priorityArray = req.body.priorityArray;
         const data = {
             productCategoryId: req.body.productCategoryId,
             productName: req.body.productName.trim(),
+            gujaratiProductName: req.body.gujaratiProductName,
             minProductQty: req.body.minProductQty,
             minProductUnit: req.body.minProductUnit.trim(),
             leadTime: req.body.leadTime ? req.body.leadTime : 0,
@@ -541,8 +545,8 @@ const addProduct = async (req, res) => {
                 if (row && row.length) {
                     return res.status(400).send('Product is Already In Use');
                 } else {
-                    const sql_querry_addUser = `INSERT INTO inventory_product_data(productId, productCategoryId, productName, minProductQty, minProductUnit, leadTime, isExpired, expiredDays, isFactoryMade)
-                                                VALUES('${productId}', '${data.productCategoryId}', '${data.productName}', ${data.minProductQty}, '${data.minProductUnit}', ${data.leadTime}, ${data.isExpired}, ${data.isExpired ? `${data.expiredDays}` : 0}, ${data.isFactoryMade})`;
+                    const sql_querry_addUser = `INSERT INTO inventory_product_data(productId, productCategoryId, productName, gujaratiProductName, minProductQty, minProductUnit, leadTime, isExpired, expiredDays, isFactoryMade)
+                                                VALUES('${productId}', '${data.productCategoryId}', '${data.productName}',  ${data.gujaratiProductName ? `'${data.gujaratiProductName}'` : null},  ${data.minProductQty}, '${data.minProductUnit}', ${data.leadTime}, ${data.isExpired}, ${data.isExpired ? `${data.expiredDays}` : 0}, ${data.isFactoryMade})`;
                     pool.query(sql_querry_addUser, (err, result) => {
                         if (err) {
                             console.error("An error occurd in SQL Queery", err);
@@ -1563,6 +1567,7 @@ const updateProduct = async (req, res) => {
         const data = {
             productCategoryId: req.body.productCategoryId,
             productName: req.body.productName.trim(),
+            gujaratiProductName: req.body.gujaratiProductName,
             minProductQty: req.body.minProductQty,
             minProductUnit: req.body.minProductUnit.trim(),
             leadTime: req.body.leadTime ? req.body.leadTime : 0,
@@ -1576,6 +1581,7 @@ const updateProduct = async (req, res) => {
         const sql_querry_updatedetails = `UPDATE inventory_product_data SET 
                                                 productCategoryId = '${data.productCategoryId}',
                                                 productName = '${data.productName}',
+                                                gujaratiProductName = ${data.gujaratiProductName ? `'${data.gujaratiProductName}'` : null},
                                                 minProductQty = ${data.minProductQty},
                                                 minProductUnit = '${data.minProductUnit}',
                                                 leadTime = ${data.leadTime},
@@ -1621,808 +1627,6 @@ const updateProduct = async (req, res) => {
     }
 }
 
-// Export Excel Query for Product Table
-
-const exportExcelSheetForProductTable = (req, res) => {
-
-    var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
-    var firstDay = new Date(y, m, 1).toString().slice(4, 15);
-    var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
-
-    console.log("1111>>>>", firstDay);
-    console.log("1111>>>>", lastDay);
-
-    const data = {
-        startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
-        endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15)
-    }
-    const commanQuarry = `SELECT
-                            p.productId,
-                            UCASE(p.productName) AS productName,
-                            CONCAT(p.minProductQty,' ',p.minProductUnit) AS minQty,
-                            CONCAT(COALESCE(simw.total_quantity, 0),' ',p.minProductUnit) AS purchase,
-                            CONCAT(COALESCE(somw.total_quantity, 0),' ',p.minProductUnit) AS totalUsed,
-                            COALESCE(simw.totalExpense,0) AS totalExpense,
-                            COALESCE(somw.total_usedPrice,0) AS totalUsedPrice,
-                            CONCAT(COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0),' ',p.minProductUnit) AS remainingStock,
-                            COALESCE(si.total_siPrice, 0) - COALESCE(so.total_soPrice, 0) AS remainPrice,
-                            COALESCE(siLu.productPrice, 0) AS lastPrice,
-                            CONCAT(COALESCE(siLu.productQty, 0),' ',p.minProductUnit) AS lastUpdatedQty,
-                            COALESCE(
-                                DATE_FORMAT(siLu.stockInDate, '%d-%m-%Y'),
-                                "No Update"
-                            ) AS lastUpdatedStockInDate,
-                            CASE WHEN COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty THEN 'In-Stock' WHEN COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0 THEN 'Low-Stock' ELSE 'Out-Stock'
-                        END AS stockStatus
-                        FROM
-                            inventory_product_data AS p
-                        LEFT JOIN(
-                            SELECT
-                                inventory_stockIn_data.productId,
-                                ROUND(SUM(
-                                    inventory_stockIn_data.productQty
-                                ),2) AS total_quantity,
-                                ROUND(SUM(
-                                    inventory_stockIn_data.totalPrice
-                                )) AS total_siPrice
-                            FROM
-                                inventory_stockIn_data
-                            GROUP BY
-                                inventory_stockIn_data.productId
-                        ) AS si
-                        ON
-                            p.productId = si.productId
-                        LEFT JOIN(
-                            SELECT
-                                inventory_stockOut_data.productId,
-                                ROUND(SUM(
-                                    inventory_stockOut_data.productQty
-                                ),2) AS total_quantity,
-                                ROUND(SUM(
-                                    inventory_stockOut_data.stockOutPrice
-                                )) AS total_soPrice
-                            FROM
-                                inventory_stockOut_data
-                            GROUP BY
-                                inventory_stockOut_data.productId
-                        ) AS so
-                        ON
-                            p.productId = so.productId
-                        LEFT JOIN(
-                            SELECT
-                                productId,
-                                stockInDate,
-                                productQty,
-                                productPrice
-                            FROM
-                                inventory_stockIn_data
-                            WHERE
-                                (productId, stockInCreationDate) IN(
-                                SELECT
-                                    productId,
-                                    MAX(stockInCreationDate)
-                                FROM
-                                    inventory_stockIn_data
-                                GROUP BY
-                                    productId
-                            )
-                        ) AS siLu
-                        ON
-                            p.productId = siLu.productId`;
-    if (req.query.startDate && req.query.endDate) {
-        sql_queries_getdetails = `${commanQuarry}
-                                        LEFT JOIN(
-                                                SELECT
-                                                    inventory_stockIn_data.productId,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.productQty
-                                                    ),2) AS total_quantity,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.totalPrice
-                                                    )) AS totalExpense
-                                                FROM
-                                                    inventory_stockIn_data
-                                                WHERE
-                                                    inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                                GROUP BY
-                                                    inventory_stockIn_data.productId
-                                            ) AS simw
-                                            ON
-                                            p.productId = simw.productId
-                                        LEFT JOIN(
-                                            SELECT
-                                                inventory_stockOut_data.productId,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.productQty
-                                                ),2) AS total_quantity,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.stockOutPrice
-                                                )) AS total_usedPrice
-                                            FROM
-                                                inventory_stockOut_data
-                                            WHERE
-                                                inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                            GROUP BY
-                                                inventory_stockOut_data.productId
-                                        ) AS somw
-                                        ON
-                                        p.productId = somw.productId 
-                                        ORDER BY p.productName;
-                                        ${commanQuarry}
-                                        LEFT JOIN(
-                                                SELECT
-                                                    inventory_stockIn_data.productId,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.productQty
-                                                    ),2) AS total_quantity,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.totalPrice
-                                                    )) AS totalExpense
-                                                FROM
-                                                    inventory_stockIn_data
-                                                WHERE
-                                                    inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                                GROUP BY
-                                                    inventory_stockIn_data.productId
-                                            ) AS simw
-                                            ON
-                                            p.productId = simw.productId
-                                        LEFT JOIN(
-                                            SELECT
-                                                inventory_stockOut_data.productId,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.productQty
-                                                ),2) AS total_quantity,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.stockOutPrice
-                                                )) AS total_usedPrice
-                                            FROM
-                                                inventory_stockOut_data
-                                            WHERE
-                                                inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                            GROUP BY
-                                                inventory_stockOut_data.productId
-                                        ) AS somw
-                                        ON
-                                        p.productId = somw.productId
-                                        WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty  
-                                        ORDER BY p.productName;
-                                        ${commanQuarry}
-                                        LEFT JOIN(
-                                                SELECT
-                                                    inventory_stockIn_data.productId,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.productQty
-                                                    ),2) AS total_quantity,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.totalPrice
-                                                    )) AS totalExpense
-                                                FROM
-                                                    inventory_stockIn_data
-                                                WHERE
-                                                    inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                                GROUP BY
-                                                    inventory_stockIn_data.productId
-                                            ) AS simw
-                                            ON
-                                            p.productId = simw.productId
-                                        LEFT JOIN(
-                                            SELECT
-                                                inventory_stockOut_data.productId,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.productQty
-                                                ),2) AS total_quantity,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.stockOutPrice
-                                                )) AS total_usedPrice
-                                            FROM
-                                                inventory_stockOut_data
-                                            WHERE
-                                                inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                            GROUP BY
-                                                inventory_stockOut_data.productId
-                                        ) AS somw
-                                        ON
-                                        p.productId = somw.productId
-                                        WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0 
-                                        ORDER BY p.productName;
-                                        ${commanQuarry}
-                                        LEFT JOIN(
-                                                SELECT
-                                                    inventory_stockIn_data.productId,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.productQty
-                                                    ),2) AS total_quantity,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.totalPrice
-                                                    )) AS totalExpense
-                                                FROM
-                                                    inventory_stockIn_data
-                                                WHERE
-                                                    inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                                GROUP BY
-                                                    inventory_stockIn_data.productId
-                                            ) AS simw
-                                            ON
-                                            p.productId = simw.productId
-                                        LEFT JOIN(
-                                            SELECT
-                                                inventory_stockOut_data.productId,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.productQty
-                                                ),2) AS total_quantity,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.stockOutPrice
-                                                )) AS total_usedPrice
-                                            FROM
-                                                inventory_stockOut_data
-                                            WHERE
-                                                inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                            GROUP BY
-                                                inventory_stockOut_data.productId
-                                        ) AS somw
-                                        ON
-                                        p.productId = somw.productId
-                                        WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) = 0
-                                        ORDER BY p.productName;`;
-    } else {
-        sql_queries_getdetails = `${commanQuarry}
-                                        LEFT JOIN(
-                                                SELECT
-                                                    inventory_stockIn_data.productId,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.productQty
-                                                    ),2) AS total_quantity,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.totalPrice
-                                                    )) AS totalExpense
-                                                FROM
-                                                    inventory_stockIn_data
-                                                WHERE
-                                                    inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                                GROUP BY
-                                                    inventory_stockIn_data.productId
-                                            ) AS simw
-                                            ON
-                                            p.productId = simw.productId
-                                        LEFT JOIN(
-                                            SELECT
-                                                inventory_stockOut_data.productId,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.productQty
-                                                ),2) AS total_quantity,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.stockOutPrice
-                                                )) AS total_usedPrice
-                                            FROM
-                                                inventory_stockOut_data
-                                            WHERE
-                                                inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                            GROUP BY
-                                                inventory_stockOut_data.productId
-                                        ) AS somw
-                                        ON
-                                        p.productId = somw.productId
-                                        ORDER BY p.productName;
-                                        ${commanQuarry}
-                                        LEFT JOIN(
-                                                SELECT
-                                                    inventory_stockIn_data.productId,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.productQty
-                                                    ),2) AS total_quantity,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.totalPrice
-                                                    )) AS totalExpense
-                                                FROM
-                                                    inventory_stockIn_data
-                                                WHERE
-                                                    inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                                GROUP BY
-                                                    inventory_stockIn_data.productId
-                                            ) AS simw
-                                            ON
-                                            p.productId = simw.productId
-                                        LEFT JOIN(
-                                            SELECT
-                                                inventory_stockOut_data.productId,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.productQty
-                                                ),2) AS total_quantity,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.stockOutPrice
-                                                )) AS total_usedPrice
-                                            FROM
-                                                inventory_stockOut_data
-                                            WHERE
-                                                inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                            GROUP BY
-                                                inventory_stockOut_data.productId
-                                        ) AS somw
-                                        ON
-                                        p.productId = somw.productId
-                                        WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty  
-                                        ORDER BY p.productName;
-                                        ${commanQuarry}
-                                        LEFT JOIN(
-                                                SELECT
-                                                    inventory_stockIn_data.productId,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.productQty
-                                                    ),2) AS total_quantity,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.totalPrice
-                                                    )) AS totalExpense
-                                                FROM
-                                                    inventory_stockIn_data
-                                                WHERE
-                                                    inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                                GROUP BY
-                                                    inventory_stockIn_data.productId
-                                            ) AS simw
-                                            ON
-                                            p.productId = simw.productId
-                                        LEFT JOIN(
-                                            SELECT
-                                                inventory_stockOut_data.productId,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.productQty
-                                                ),2) AS total_quantity,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.stockOutPrice
-                                                )) AS total_usedPrice
-                                            FROM
-                                                inventory_stockOut_data
-                                            WHERE
-                                                inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                            GROUP BY
-                                                inventory_stockOut_data.productId
-                                        ) AS somw
-                                        ON
-                                        p.productId = somw.productId
-                                        WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0 
-                                        ORDER BY p.productName;
-                                        ${commanQuarry}
-                                        LEFT JOIN(
-                                                SELECT
-                                                    inventory_stockIn_data.productId,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.productQty
-                                                    ),2) AS total_quantity,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.totalPrice
-                                                    )) AS totalExpense
-                                                FROM
-                                                    inventory_stockIn_data
-                                                WHERE
-                                                    inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                                GROUP BY
-                                                    inventory_stockIn_data.productId
-                                            ) AS simw
-                                            ON
-                                            p.productId = simw.productId
-                                        LEFT JOIN(
-                                            SELECT
-                                                inventory_stockOut_data.productId,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.productQty
-                                                ),2) AS total_quantity,
-                                                ROUND(SUM(
-                                                    inventory_stockOut_data.stockOutPrice
-                                                )) AS total_usedPrice
-                                            FROM
-                                                inventory_stockOut_data
-                                            WHERE
-                                                inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                            GROUP BY
-                                                inventory_stockOut_data.productId
-                                        ) AS somw
-                                        ON
-                                        p.productId = somw.productId
-                                        WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) = 0
-                                        ORDER BY p.productName;`;
-    }
-    console.log('find me', sql_queries_getdetails)
-    pool.query(sql_queries_getdetails, async (err, rows) => {
-        if (err) return res.status(404).send(err);
-        console.log(":::", rows)
-        const workbook = new excelJS.Workbook();  // Create a new workbook
-        const worksheet = workbook.addWorksheet("All Products"); // New Worksheet
-
-        if (req.query.startDate && req.query.endDate) {
-            worksheet.mergeCells('A1', 'M1');
-            worksheet.getCell('A1').value = `Product List From ${data.startDate} To ${data.endDate}`;
-        } else {
-            worksheet.mergeCells('A1', 'M1');
-            worksheet.getCell('A1').value = `Product List From ${firstDay} To ${lastDay}`;
-        }
-
-        /*Column headers*/
-        worksheet.getRow(2).values = ['S no.', 'Product Name', 'Total StockIn', 'Total Expense', 'Total Used', 'Total Used Price', 'Remaining Stock', 'Remaining Price', 'Last StockIn', 'Last Updated Price', 'Min ProductQty', 'Stock Status', 'LastIn DATE'];
-
-        // Column for data in excel. key must match data key
-        worksheet.columns = [
-            { key: "s_no", width: 10, },
-            { key: "productName", width: 30 },
-            { key: "purchase", width: 20 },
-            { key: "totalExpense", width: 20 },
-            { key: "totalUsed", width: 20 },
-            { key: "totalUsedPrice", width: 20 },
-            { key: "remainingStock", width: 20 },
-            { key: "remainPrice", width: 20 },
-            { key: "lastUpdatedQty", width: 20 },
-            { key: "lastPrice", width: 20 },
-            { key: "minQty", width: 20 },
-            { key: "stockStatus", width: 30 },
-            { key: "lastUpdatedStockInDate", width: 15 }
-        ];
-        //Looping through User data
-        const arr = rows[0]
-        console.log(">>>", arr);
-        let counter = 1;
-        arr.forEach((user, index) => {
-            user.s_no = counter;
-            const row = worksheet.addRow(user); // Add data in worksheet
-
-            // Get the stock status value for the current row
-            const stockStatus = user.stockStatus;
-
-            // Set color based on stock status
-            let textColor;
-            switch (stockStatus) {
-                case 'In-Stock':
-                    textColor = '008000'; // Green color
-                    break;
-                case 'Low-Stock':
-                    textColor = 'FFA500'; // Orange color
-                    break;
-                case 'Out-Stock':
-                    textColor = 'FF0000'; // Red color
-                    break;
-                default:
-                    textColor = '000000'; // Black color (default)
-                    break;
-            }
-
-            // Apply the color to the cells in the current row
-            row.eachCell((cell) => {
-                cell.font = {
-                    color: {
-                        argb: textColor
-                    }
-                };
-            });
-
-            counter++;
-        });
-        // Making first line in excel bold
-        worksheet.getRow(1).eachCell((cell) => {
-            cell.font = { bold: true, size: 13 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            height = 200
-        });
-        worksheet.getRow(2).eachCell((cell) => {
-            cell.font = { bold: true, size: 13, color: { argb: '808080' } }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        });
-        worksheet.getRow(1).height = 30;
-        worksheet.getRow(2).height = 20;
-        worksheet.getRow(arr.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arr.length + 2})` }, '', { formula: `SUM(F3:F${arr.length + 2})` }, '', { formula: `SUM(H3:H${arr.length + 2})` }];
-
-        worksheet.getRow(arr.length + 3).eachCell((cell) => {
-            cell.font = { bold: true, size: 14, color: { argb: '808080' } }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        })
-        worksheet.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-            });
-        });
-
-        const worksheetInStock = workbook.addWorksheet("In Stock"); // New Worksheet
-
-        if (req.query.startDate && req.query.endDate) {
-            worksheetInStock.mergeCells('A1', 'M1');
-            worksheetInStock.getCell('A1').value = `In-Stock Product List From ${data.startDate} To ${data.endDate}`;
-        } else {
-            worksheetInStock.mergeCells('A1', 'M1');
-            worksheetInStock.getCell('A1').value = `In-Stock Product List From ${firstDay} To ${lastDay}`;
-        }
-
-        /*Column headers*/
-        worksheetInStock.getRow(2).values = ['S no.', 'Product Name', 'Total StockIn', 'Total Expense', 'Total Used', 'Total Used Price', 'Remaining Stock', 'Remaining Price', 'Last StockIn', 'Last Updated Price', 'Min ProductQty', 'Stock Status', 'LastIn DATE'];
-
-        // Column for data in excel. key must match data key
-        worksheetInStock.columns = [
-            { key: "s_no", width: 10, },
-            { key: "productName", width: 30 },
-            { key: "purchase", width: 20 },
-            { key: "totalExpense", width: 20 },
-            { key: "totalUsed", width: 20 },
-            { key: "totalUsedPrice", width: 20 },
-            { key: "remainingStock", width: 20 },
-            { key: "remainPrice", width: 20 },
-            { key: "lastUpdatedQty", width: 20 },
-            { key: "lastPrice", width: 20 },
-            { key: "minQty", width: 20 },
-            { key: "stockStatus", width: 30 },
-            { key: "lastUpdatedStockInDate", width: 15 }
-        ];
-        //Looping through User data
-        const arrstockIn = rows[1]
-        console.log(">>>", arr);
-        let inStockcounter = 1;
-        arrstockIn.forEach((user, index) => {
-            user.s_no = inStockcounter;
-            const row = worksheetInStock.addRow(user); // Add data in worksheet
-
-            // Get the stock status value for the current row
-            const stockStatus = user.stockStatus;
-
-            // Set color based on stock status
-            let textColor;
-            switch (stockStatus) {
-                case 'In-Stock':
-                    textColor = '008000'; // Green color
-                    break;
-                case 'Low-Stock':
-                    textColor = 'FFA500'; // Orange color
-                    break;
-                case 'Out-Stock':
-                    textColor = 'FF0000'; // Red color
-                    break;
-                default:
-                    textColor = '000000'; // Black color (default)
-                    break;
-            }
-
-            // Apply the color to the cells in the current row
-            row.eachCell((cell) => {
-                cell.font = {
-                    color: {
-                        argb: textColor
-                    }
-                };
-            });
-
-            inStockcounter++;
-        });
-        // Making first line in excel bold
-        worksheetInStock.getRow(1).eachCell((cell) => {
-            cell.font = { bold: true, size: 13 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            height = 200
-        });
-        worksheetInStock.getRow(2).eachCell((cell) => {
-            cell.font = { bold: true, size: 13, color: { argb: '808080' } }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        });
-        worksheetInStock.getRow(1).height = 30;
-        worksheetInStock.getRow(2).height = 20;
-        worksheetInStock.getRow(arrstockIn.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arrstockIn.length + 2})` }, '', { formula: `SUM(F3:F${arrstockIn.length + 2})` }, '', { formula: `SUM(H3:H${arrstockIn.length + 2})` }];
-
-        worksheetInStock.getRow(arrstockIn.length + 3).eachCell((cell) => {
-            cell.font = { bold: true, size: 14, color: { argb: '808080' } }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        })
-        worksheetInStock.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-            });
-        });
-
-        const worksheetLowStock = workbook.addWorksheet("Low Stock"); // New Worksheet
-
-        if (req.query.startDate && req.query.endDate) {
-            worksheetLowStock.mergeCells('A1', 'M1');
-            worksheetLowStock.getCell('A1').value = `Low-Stock Product List From ${data.startDate} To ${data.endDate}`;
-        } else {
-            worksheetLowStock.mergeCells('A1', 'M1');
-            worksheetLowStock.getCell('A1').value = `Low-Stock Product List From ${firstDay} To ${lastDay}`;
-        }
-
-        /*Column headers*/
-        worksheetLowStock.getRow(2).values = ['S no.', 'Product Name', 'Total StockIn', 'Total Expense', 'Total Used', 'Total Used Price', 'Remaining Stock', 'Remaining Price', 'Last StockIn', 'Last Updated Price', 'Min ProductQty', 'Stock Status', 'LastIn DATE'];
-
-        // Column for data in excel. key must match data key
-        worksheetLowStock.columns = [
-            { key: "s_no", width: 10, },
-            { key: "productName", width: 30 },
-            { key: "purchase", width: 20 },
-            { key: "totalExpense", width: 20 },
-            { key: "totalUsed", width: 20 },
-            { key: "totalUsedPrice", width: 20 },
-            { key: "remainingStock", width: 20 },
-            { key: "remainPrice", width: 20 },
-            { key: "lastUpdatedQty", width: 20 },
-            { key: "lastPrice", width: 20 },
-            { key: "minQty", width: 20 },
-            { key: "stockStatus", width: 30 },
-            { key: "lastUpdatedStockInDate", width: 15 }
-        ];
-        //Looping through User data
-        const arrstockLow = rows[2]
-        console.log(">>>", arr);
-        let lowStockcounter = 1;
-        arrstockLow.forEach((user, index) => {
-            if (Object.values(user).some((value) => value !== null && value !== "")) {
-                user.s_no = lowStockcounter;
-                const row = worksheetLowStock.addRow(user); // Add data in worksheet
-
-                // Get the stock status value for the current row
-                const stockStatus = user.stockStatus;
-
-                // Set color based on stock status
-                let textColor;
-                switch (stockStatus) {
-                    case 'In-Stock':
-                        textColor = '008000'; // Green color
-                        break;
-                    case 'Low-Stock':
-                        textColor = 'FFA500'; // Orange color
-                        break;
-                    case 'Out-Stock':
-                        textColor = 'FF0000'; // Red color
-                        break;
-                    default:
-                        textColor = '000000'; // Black color (default)
-                        break;
-                }
-
-                // Apply the color to the cells in the current row
-                row.eachCell((cell) => {
-                    cell.font = {
-                        color: {
-                            argb: textColor
-                        }
-                    };
-                });
-
-                lowStockcounter++;
-            }
-        });
-        // Making first line in excel bold
-        worksheetLowStock.getRow(1).eachCell((cell) => {
-            cell.font = { bold: true, size: 13 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            height = 200
-        });
-        worksheetLowStock.getRow(2).eachCell((cell) => {
-            cell.font = { bold: true, size: 13, color: { argb: '808080' } }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        });
-        worksheetLowStock.getRow(1).height = 30;
-        worksheetLowStock.getRow(2).height = 20;
-        worksheetLowStock.getRow(arrstockLow.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arrstockLow.length + 2})` }, '', { formula: `SUM(F3:F${arrstockLow.length + 2})` }, '', { formula: `SUM(H3:H${arrstockLow.length + 2})` }];
-
-        worksheetLowStock.getRow(arrstockLow.length + 3).eachCell((cell) => {
-            cell.font = { bold: true, size: 14, color: { argb: '808080' } }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        })
-        worksheetLowStock.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-            });
-        });
-
-        const worksheetOutStock = workbook.addWorksheet("Out Stock"); // New Worksheet
-
-        if (req.query.startDate && req.query.endDate) {
-            worksheetOutStock.mergeCells('A1', 'M1');
-            worksheetOutStock.getCell('A1').value = `Out-Stock Product List From ${data.startDate} To ${data.endDate}`;
-        } else {
-            worksheetOutStock.mergeCells('A1', 'M1');
-            worksheetOutStock.getCell('A1').value = `Out-Stock Product List From ${firstDay} To ${lastDay}`;
-        }
-
-        /*Column headers*/
-        worksheetOutStock.getRow(2).values = ['S no.', 'Product Name', 'Total StockIn', 'Total Expense', 'Total Used', 'Total Used Price', 'Remaining Stock', 'Remaining Price', 'Last StockIn', 'Last Updated Price', 'Min ProductQty', 'Stock Status', 'LastIn DATE'];
-
-        // Column for data in excel. key must match data key
-        worksheetOutStock.columns = [
-            { key: "s_no", width: 10, },
-            { key: "productName", width: 30 },
-            { key: "purchase", width: 20 },
-            { key: "totalExpense", width: 20 },
-            { key: "totalUsed", width: 20 },
-            { key: "totalUsedPrice", width: 20 },
-            { key: "remainingStock", width: 20 },
-            { key: "remainPrice", width: 20 },
-            { key: "lastUpdatedQty", width: 20 },
-            { key: "lastPrice", width: 20 },
-            { key: "minQty", width: 20 },
-            { key: "stockStatus", width: 30 },
-            { key: "lastUpdatedStockInDate", width: 15 }
-        ];
-        //Looping through User data
-        const arrstockOut = rows[3]
-        console.log(">>>", arr);
-        let outStockcounter = 1;
-        arrstockOut.forEach((user, index) => {
-            user.s_no = outStockcounter;
-            const row = worksheetOutStock.addRow(user); // Add data in worksheet
-
-            // Get the stock status value for the current row
-            const stockStatus = user.stockStatus;
-
-            // Set color based on stock status
-            let textColor;
-            switch (stockStatus) {
-                case 'In-Stock':
-                    textColor = '008000'; // Green color
-                    break;
-                case 'Low-Stock':
-                    textColor = 'FFA500'; // Orange color
-                    break;
-                case 'Out-Stock':
-                    textColor = 'FF0000'; // Red color
-                    break;
-                default:
-                    textColor = '000000'; // Black color (default)
-                    break;
-            }
-
-            // Apply the color to the cells in the current row
-            row.eachCell((cell) => {
-                cell.font = {
-                    color: {
-                        argb: textColor
-                    }
-                };
-            });
-
-            outStockcounter++;
-        });
-        // Making first line in excel bold
-        worksheetOutStock.getRow(1).eachCell((cell) => {
-            cell.font = { bold: true, size: 13 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            height = 200
-        });
-        worksheetOutStock.getRow(2).eachCell((cell) => {
-            cell.font = { bold: true, size: 13, color: { argb: '808080' } }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        });
-        worksheetOutStock.getRow(1).height = 30;
-        worksheetOutStock.getRow(2).height = 20;
-        worksheetOutStock.getRow(arrstockOut.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arrstockOut.length + 2})` }, '', { formula: `SUM(F3:F${arrstockOut.length + 2})` }, '', { formula: `SUM(H3:H${arrstockOut.length + 2})` }];
-
-        worksheetOutStock.getRow(arrstockOut.length + 3).eachCell((cell) => {
-            cell.font = { bold: true, size: 14, color: { argb: '808080' } }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        })
-        worksheetOutStock.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-            });
-        });
-
-        try {
-            const data = await workbook.xlsx.writeBuffer()
-            var fileName = new Date().toString().slice(4, 15) + ".xlsx";
-            console.log(">>>", fileName);
-            // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            // res.addHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename="+ fileName)
-            res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            res.type = 'blob';
-            res.send(data)
-            // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            // res.setHeader("Content-Disposition", "attachment; filename=" + "Report.xlsx");
-            // workbook.xlsx.write(res)
-            // .then((data)=>{
-            //     res.end();
-            //         console.log('File write done........');
-            //     });
-        } catch (err) {
-            throw new Error(err);
-        }
-    })
-};
-
 // Get Product Details By Id
 
 const getProductDetailsById = (req, res) => {
@@ -2432,15 +1636,18 @@ const getProductDetailsById = (req, res) => {
             return res.status(404).send('ProductId Not Found');
         }
         sql_queries_getdetails = `SELECT productId, productCategoryId, productName, minProductQty, minProductUnit, leadTime, isExpired, expiredDays, isFactoryMade FROM inventory_product_data WHERE productId = '${productId}';
-                                    SELECT priorityNumber, bigUnitName, unitNumber, smallUnitName FROM product_unit_preference WHERE productId = '${productId}'`;
+                                  SELECT priorityNumber, bigUnitName, unitNumber, smallUnitName FROM product_unit_preference WHERE productId = '${productId}'`;
         pool.query(sql_queries_getdetails, (err, data) => {
             if (err) {
                 console.error("An error occurd in SQL Queery", err);
                 return res.status(500).send('Database Error');
             }
+            const unitNames = data[1].map(item => item.bigUnitName);
+            unitNames.splice(0, 0, data[0][0].minProductUnit);
             const mergedObject = {
                 ...data[0][0], // Copy the first object as it contains the product information
-                priorityArray: data[1] // Assign the second array as "priorityArray"
+                priorityArray: data[1], // Assign the second array as "priorityArray"
+                unitArr: unitNames
             };
             return res.status(200).send(mergedObject);
         })
@@ -2573,7 +1780,7 @@ const getUnitPreferenceById = (req, res) => {
             return res.status(404), send('ProductId Not Found');
         }
         sql_get_preference = `SELECT
-                                    CONCAT('1',' ',pup.bigUnitName,' = ',pup.unitNumber,' ',pup.smallUnitName) AS preference
+                                    bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit
                                 FROM
                                     product_unit_preference AS pup
                                 WHERE
@@ -2585,12 +1792,1415 @@ const getUnitPreferenceById = (req, res) => {
                 console.error("An error occurd in SQL Queery", err);
                 return res.status(500).send('Database Error');
             }
-            const result = data && data.length != 0 ? data : [{ preference: 'No Unit Conversation' }];
-            return res.status(200).send(result);
+            else if (data && data.length != 0) {
+                const baseUnit = data[0].smallerUnit;
+                const unitsData = Object.values(JSON.parse(JSON.stringify(data)));
+                console.log(unitsData);
+                const conversatio = computeConversionFactors(unitsData);
+                const unitsDatas = unitsData.map(item => {
+                    return `1 ${item.largerUnit} = ${item.value} ${item.smallerUnit}`;
+                });
+                const newData = conversatio.map(item => {
+                    return `1 ${item.unitName} = ${item.value} ${baseUnit}`;
+                });
+                const jsonData1 = unitsDatas.map(item => ({ preference: item }));
+                const jsonData2 = newData.map(item => ({ preference: item }));
+                return res.status(200).send({ json1: jsonData1, json2: jsonData2 });
+            } else {
+                return res.status(200).send({ json1: [{ preference: 'No Unit Conversation' }], json2: [] });
+            }
         })
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).json('Internal Server Error');
+    }
+}
+
+// Export Excel Query for Product Table
+
+const exportExcelSheetForProductTable = (req, res) => {
+    let token;
+    token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+    if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+        if (branchId) {
+            var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+            var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+            var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+            const data = {
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                productCategory: req.query.productCategory
+            }
+            const sql_querry_staticQuery = `SELECT
+                                                p.productId,
+                                                UCASE(p.productName) AS productName,
+                                                gujaratiProductName AS gujProductName,
+                                                CONCAT(p.minProductQty,' ',p.minProductUnit) AS minProductQty,
+                                                p.minProductUnit,
+                                                CONCAT(p.leadTime,' ','Day') AS leadTime,
+                                                p.isExpired,
+                                                CONCAT(p.expiredDays,' ','Day') AS expiredDays,
+                                                COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS remainingStock,
+                                                COALESCE(ROUND(siLu.productPrice,2), 0) AS lastPrice,
+                                                COALESCE(siLu.productQty,'No In') AS lastUpdatedQty,
+                                                COALESCE(siLu.totalPrice, 0) AS totalPrice,
+                                                COALESCE(
+                                                    DATE_FORMAT(siLu.stockInDate, '%d-%m-%Y'),
+                                                    "No Update"
+                                                ) AS lastUpdatedStockInDate,
+                                                CASE WHEN COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty THEN 'In-Stock' WHEN COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0 THEN 'Low-Stock' ELSE 'Out-Stock'
+                                            END AS stockStatus
+                                            FROM
+                                                inventory_product_data AS p
+                                            LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE branchId = '${branchId}'
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS si
+                                            ON
+                                                p.productId = si.productId
+                                            LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockOut_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockOut_data.productQty
+                                                    ),2) AS total_quantity
+                                                FROM
+                                                    inventory_stockOut_data
+                                                WHERE branchId = '${branchId}'
+                                                GROUP BY
+                                                    inventory_stockOut_data.productId
+                                            ) AS so
+                                            ON
+                                                p.productId = so.productId
+                                            LEFT JOIN(
+                                                SELECT
+                                                    productId,
+                                                    stockInDate,
+                                                    COALESCE(CONCAT(stockInDisplayQty,' ',stockInDisplayUnit),'No IN') AS productQty,
+                                                    productPrice,
+                                                    totalPrice
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE branchId = '${branchId}' AND
+                                                    (productId, stockInCreationDate) IN(
+                                                    SELECT
+                                                        productId,
+                                                        MAX(stockInCreationDate)
+                                                    FROM
+                                                        inventory_stockIn_data
+                                                    GROUP BY
+                                                        productId
+                                                )
+                                            ) AS siLu
+                                            ON
+                                                p.productId = siLu.productId`;
+            const sql_querry_getMwSiSO = `SELECT
+                                                p.productId,
+                                                UCASE(p.productName) AS productName,
+                                                gujaratiProductName AS gujProductName,
+                                                CONCAT(p.minProductQty,' ',p.minProductUnit) AS minProductQty,
+                                                p.minProductUnit,
+                                                CONCAT(p.leadTime,' ','Day') AS leadTime,
+                                                p.isExpired,
+                                                CONCAT(p.expiredDays,' ','Day') AS expiredDays,
+                                                COALESCE(simw.total_quantity, 0) AS purchese,
+                                                COALESCE(somw.total_quantity, 0) AS totalUsed,
+                                                COALESCE(simw.totalExpense,0) AS totalExpense,
+                                                COALESCE(somw.totalStockOutPrice,0) AS totalStockOutPrice,
+                                                COALESCE(si.total_siPrice, 0) - COALESCE(so.total_soPrice, 0) AS remainPrice,
+                                                COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS remainingStock,
+                                                COALESCE(ROUND(siLu.productPrice,2), 0) AS lastPrice,
+                                                COALESCE(siLu.productQty,'No In') AS lastUpdatedQty,
+                                                COALESCE(siLu.totalPrice, 0) AS totalPrice,
+                                                COALESCE(
+                                                    DATE_FORMAT(siLu.stockInDate, '%d-%m-%Y'),
+                                                    "No Update"
+                                                ) AS lastUpdatedStockInDate,
+                                                CASE WHEN COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty THEN 'In-Stock' WHEN COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0 THEN 'Low-Stock' ELSE 'Out-Stock'
+                                            END AS stockStatus
+                                            FROM
+                                                inventory_product_data AS p
+                                            LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.totalPrice
+                                                    ),2) AS total_siPrice
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE branchId = '${branchId}'
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS si
+                                            ON
+                                                p.productId = si.productId
+                                            LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockOut_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockOut_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockOut_data.stockOutPrice
+                                                    ),2) AS total_soPrice
+                                                FROM
+                                                    inventory_stockOut_data
+                                                WHERE branchId = '${branchId}'
+                                                GROUP BY
+                                                    inventory_stockOut_data.productId
+                                            ) AS so
+                                            ON
+                                                p.productId = so.productId
+                                            LEFT JOIN(
+                                                SELECT
+                                                    productId,
+                                                    stockInDate,
+                                                    CONCAT(stockInDisplayQty,' ',stockInDisplayUnit) AS productQty,
+                                                    productPrice,
+                                                    totalPrice
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE branchId = '${branchId}' AND
+                                                    (productId, stockInCreationDate) IN(
+                                                    SELECT
+                                                        productId,
+                                                        MAX(stockInCreationDate) As lastDate
+                                                    FROM
+                                                        inventory_stockIn_data
+                                                    GROUP BY
+                                                        productId
+                                                )
+                                            ) AS siLu
+                                            ON
+                                                p.productId = siLu.productId`;
+            if (req.query.productCategory) {
+                if (req.query.productStatus == 1) {
+                    sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE p.productCategoryId = '${data.productCategory}' AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty 
+                                                ORDER BY p.productName`;
+                } else if (req.query.productStatus == 2) {
+                    sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE p.productCategoryId = '${data.productCategory}' AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0
+                                                ORDER BY p.productName`;
+                } else if (req.query.productStatus == 3) {
+                    sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE p.productCategoryId = '${data.productCategory}' AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) = 0
+                                                ORDER BY p.productName`;
+                } else if (req.query.startDate && req.query.endDate) {
+                    sql_queries_getdetails = `${sql_querry_getMwSiSO}
+                                              LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.totalPrice
+                                                    )) AS totalExpense
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE
+                                                 inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS simw
+                                            ON
+                                            p.productId = simw.productId
+                                        LEFT JOIN(
+                                            SELECT
+                                                inventory_stockOut_data.productId,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.productQty
+                                                ),2) AS total_quantity,
+                                                ROUND(SUM(
+                                                        inventory_stockOut_data.stockOutPrice
+                                                )) AS totalStockOutPrice
+                                            FROM
+                                                inventory_stockOut_data
+                                            WHERE
+                                               inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                            GROUP BY
+                                                inventory_stockOut_data.productId
+                                        ) AS somw
+                                        ON
+                                        p.productId = somw.productId
+                                        WHERE p.productCategoryId = '${data.productCategory}'
+                                        ORDER BY p.productName`;
+                } else {
+                    sql_queries_getdetails = `${sql_querry_getMwSiSO}
+                                              LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.totalPrice
+                                                    )) AS totalExpense
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE
+                                                    inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS simw
+                                            ON
+                                            p.productId = simw.productId
+                                        LEFT JOIN(
+                                            SELECT
+                                                inventory_stockOut_data.productId,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.productQty
+                                                ),2) AS total_quantity,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.stockOutPrice
+                                                )) AS totalStockOutPrice
+                                            FROM
+                                                inventory_stockOut_data
+                                            WHERE
+                                                inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                            GROUP BY
+                                                inventory_stockOut_data.productId
+                                        ) AS somw
+                                        ON
+                                        p.productId = somw.productId
+                                        WHERE p.productCategoryId = '${data.productCategory}'
+                                        ORDER BY p.productName`;
+                }
+            } else {
+                if (req.query.productStatus == 1) {
+                    sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty 
+                                                ORDER BY p.productName`;
+                } else if (req.query.productStatus == 2) {
+                    sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0
+                                                ORDER BY p.productName`;
+                } else if (req.query.productStatus == 3) {
+                    sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) = 0
+                                                ORDER BY p.productName`;
+                } else if (req.query.startDate && req.query.endDate) {
+                    sql_queries_getdetails = `${sql_querry_getMwSiSO}
+                                              LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.totalPrice
+                                                    )) AS totalExpense
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE
+                                                 inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS simw
+                                            ON
+                                            p.productId = simw.productId
+                                        LEFT JOIN(
+                                            SELECT
+                                                inventory_stockOut_data.productId,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.productQty
+                                                ),2) AS total_quantity,
+                                                ROUND(SUM(
+                                                        inventory_stockOut_data.stockOutPrice
+                                                )) AS totalStockOutPrice
+                                            FROM
+                                                inventory_stockOut_data
+                                            WHERE
+                                               inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                            GROUP BY
+                                                inventory_stockOut_data.productId
+                                        ) AS somw
+                                        ON
+                                        p.productId = somw.productId
+                                        ORDER BY p.productName`;
+                } else {
+                    sql_queries_getdetails = `${sql_querry_getMwSiSO}
+                                              LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.totalPrice
+                                                    )) AS totalExpense
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE
+                                                    inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS simw
+                                            ON
+                                            p.productId = simw.productId
+                                        LEFT JOIN(
+                                            SELECT
+                                                inventory_stockOut_data.productId,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.productQty
+                                                ),2) AS total_quantity,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.stockOutPrice
+                                                )) AS totalStockOutPrice
+                                            FROM
+                                                inventory_stockOut_data
+                                            WHERE
+                                                inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                            GROUP BY
+                                                inventory_stockOut_data.productId
+                                        ) AS somw
+                                        ON
+                                        p.productId = somw.productId
+                                        ORDER BY p.productName`;
+                }
+            }
+            pool.query(sql_queries_getdetails, async (err, rows) => {
+                if (err) return res.status(404).send(err);
+                const datas = Object.values(JSON.parse(JSON.stringify(rows)));
+                processDatas(datas)
+                    .then((data) => {
+                        console.log('json 1', datas);
+                        console.log('json 2', data);
+                        const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
+                            // console.log(data[index] && data[index].convertedQuantity)
+                        ) : []
+                        let newData = [];
+                        Promise.all(
+                            rows ? rows.map(async (element, index) => {
+                                let newElement = element;
+                                return await newConversationAsync(element.purchese, element.productId, element.minProductUnit)
+                                    .then(async (res) => {
+                                        newElement = { ...newElement, purchese: res }
+                                        return await newConversationAsync(element.totalUsed, element.productId, element.minProductUnit)
+                                            .then((res) => {
+                                                newElement = { ...newElement, totalUsed: res }
+                                                newData.push(newElement)
+                                                return newElement
+                                            }).catch(error => {
+                                                console.error('Error in processing datas :', error);
+                                                return res.status(500).send('Internal Error');
+                                            });
+                                    }).catch(error => {
+                                        console.error('Error in processing datas :', error);
+                                        return res.status(500).send('Internal Error');
+                                    });
+                            }) : [])
+                            .then(async (rows) => {
+                                // return res.status(200).send({ rows });
+                                const workbook = new excelJS.Workbook();  // Create a new workbook
+                                const worksheet = workbook.addWorksheet("All Products"); // New Worksheet
+
+                                if (req.query.startDate && req.query.endDate) {
+                                    worksheet.mergeCells('A1', 'N1');
+                                    worksheet.getCell('A1').value = `Product List From ${data.startDate} To ${data.endDate}`;
+                                } else {
+                                    worksheet.mergeCells('A1', 'N1');
+                                    worksheet.getCell('A1').value = `Product List From ${firstDay} To ${lastDay}`;
+                                }
+
+                                const headersNameList = ['S no.', 'Product Name', 'પ્રોડક્ટ નામ', 'Total StockIn', 'Total Expense', 'Total Used', 'Total Used Price', 'Remaining Stock', 'Remaining Price', 'Last StockIn', 'Last Price', 'Last Updated Price', 'Min ProductQty', 'Stock Status', 'LastIn DATE'];
+                                const columnsArray = [
+                                    { key: "s_no", width: 10, },
+                                    { key: "productName", width: 30 },
+                                    { key: "gujProductName", width: 30 },
+                                    { key: "purchese", width: 40 },
+                                    { key: "totalExpense", width: 20 },
+                                    { key: "totalUsed", width: 40 },
+                                    { key: "totalStockOutPrice", width: 20 },
+                                    { key: "remainingStock", width: 40 },
+                                    { key: "remainPrice", width: 20 },
+                                    { key: "lastUpdatedQty", width: 20 },
+                                    { key: "totalPrice", width: 20 },
+                                    { key: "lastPrice", width: 20 },
+                                    { key: "minProductQty", width: 20 },
+                                    { key: "stockStatus", width: 30 },
+                                    { key: "lastUpdatedStockInDate", width: 15 }
+                                ];
+
+                                /*Column headers*/
+                                worksheet.getRow(2).values = headersNameList;
+
+                                // Column for data in excel. key must match data key
+                                worksheet.columns = columnsArray;
+                                //Looping through User data
+                                const arr = rows
+                                console.log(arr);
+                                console.log(">>>", arr);
+                                let counter = 1;
+                                arr.forEach((user, index) => {
+                                    user.s_no = counter;
+                                    const row = worksheet.addRow(user); // Add data in worksheet
+
+                                    // Get the stock status value for the current row
+                                    const stockStatus = user.stockStatus;
+
+                                    // Set color based on stock status
+                                    let textColor;
+                                    switch (stockStatus) {
+                                        case 'In-Stock':
+                                            textColor = '008000'; // Green color
+                                            break;
+                                        case 'Low-Stock':
+                                            textColor = 'FFA500'; // Orange color
+                                            break;
+                                        case 'Out-Stock':
+                                            textColor = 'FF0000'; // Red color
+                                            break;
+                                        default:
+                                            textColor = '000000'; // Black color (default)
+                                            break;
+                                    }
+
+                                    // Apply the color to the cells in the current row
+                                    row.eachCell((cell) => {
+                                        cell.font = {
+                                            color: {
+                                                argb: textColor
+                                            }
+                                        };
+                                    });
+
+                                    counter++;
+                                });
+                                // Making first line in excel bold
+                                worksheet.getRow(1).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 13 }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                    height = 200
+                                });
+                                worksheet.getRow(2).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 13, color: { argb: '808080' } }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                });
+                                worksheet.getRow(1).height = 30;
+                                worksheet.getRow(2).height = 20;
+                                worksheet.getRow(arr.length + 3).values = ['Total:', '', '', '', { formula: `SUM(E3:E${arr.length + 2})` }, '', { formula: `SUM(G3:G${arr.length + 2})` }, '', { formula: `SUM(I3:I${arr.length + 2})` }];
+
+                                worksheet.getRow(arr.length + 3).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 14, color: { argb: '808080' } }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                })
+                                worksheet.eachRow((row) => {
+                                    row.eachCell((cell) => {
+                                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                                        row.height = 20
+                                    });
+                                });
+
+                                const worksheetInStock = workbook.addWorksheet("In Stock"); // New Worksheet
+
+                                if (req.query.startDate && req.query.endDate) {
+                                    worksheetInStock.mergeCells('A1', 'N1');
+                                    worksheetInStock.getCell('A1').value = `In-Stock Product List From ${data.startDate} To ${data.endDate}`;
+                                } else {
+                                    worksheetInStock.mergeCells('A1', 'N1');
+                                    worksheetInStock.getCell('A1').value = `In-Stock Product List From ${firstDay} To ${lastDay}`;
+                                }
+
+                                /*Column headers*/
+                                worksheetInStock.getRow(2).values = headersNameList;
+
+                                // Column for data in excel. key must match data key
+                                worksheetInStock.columns = columnsArray;
+                                const inStockProducts = rows.filter(product => product.stockStatus === 'In-Stock');
+                                console.log(inStockProducts);
+                                //Looping through User data
+                                const arrstockIn = inStockProducts
+                                console.log(">>>", arr);
+                                let inStockcounter = 1;
+                                arrstockIn.forEach((user, index) => {
+                                    user.s_no = inStockcounter;
+                                    const row = worksheetInStock.addRow(user); // Add data in worksheet
+
+                                    // Get the stock status value for the current row
+                                    const stockStatus = user.stockStatus;
+
+                                    // Set color based on stock status
+                                    let textColor;
+                                    switch (stockStatus) {
+                                        case 'In-Stock':
+                                            textColor = '008000'; // Green color
+                                            break;
+                                        case 'Low-Stock':
+                                            textColor = 'FFA500'; // Orange color
+                                            break;
+                                        case 'Out-Stock':
+                                            textColor = 'FF0000'; // Red color
+                                            break;
+                                        default:
+                                            textColor = '000000'; // Black color (default)
+                                            break;
+                                    }
+
+                                    // Apply the color to the cells in the current row
+                                    row.eachCell((cell) => {
+                                        cell.font = {
+                                            color: {
+                                                argb: textColor
+                                            }
+                                        };
+                                    });
+
+                                    inStockcounter++;
+                                });
+                                // Making first line in excel bold
+                                worksheetInStock.getRow(1).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 13 }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                    height = 200
+                                });
+                                worksheetInStock.getRow(2).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 13, color: { argb: '808080' } }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                });
+                                worksheetInStock.getRow(1).height = 30;
+                                worksheetInStock.getRow(2).height = 20;
+                                worksheetInStock.getRow(arrstockIn.length + 3).values = ['Total:', '', '', '', { formula: `SUM(E3:E${arrstockIn.length + 2})` }, '', { formula: `SUM(G3:G${arrstockIn.length + 2})` }, '', { formula: `SUM(I3:I${arrstockIn.length + 2})` }];
+
+                                worksheetInStock.getRow(arrstockIn.length + 3).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 14, color: { argb: '808080' } }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                })
+                                worksheetInStock.eachRow((row) => {
+                                    row.eachCell((cell) => {
+                                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                                        row.height = 20
+                                    });
+                                });
+
+                                const worksheetLowStock = workbook.addWorksheet("Low Stock"); // New Worksheet
+
+                                if (req.query.startDate && req.query.endDate) {
+                                    worksheetLowStock.mergeCells('A1', 'N1');
+                                    worksheetLowStock.getCell('A1').value = `Low-Stock Product List From ${data.startDate} To ${data.endDate}`;
+                                } else {
+                                    worksheetLowStock.mergeCells('A1', 'N1');
+                                    worksheetLowStock.getCell('A1').value = `Low-Stock Product List From ${firstDay} To ${lastDay}`;
+                                }
+
+                                /*Column headers*/
+                                worksheetLowStock.getRow(2).values = headersNameList;
+
+                                // Column for data in excel. key must match data key
+                                worksheetLowStock.columns = columnsArray;
+
+                                worksheetInStock.columns = columnsArray;
+                                const lowStockProducts = rows.filter(product => product.stockStatus === 'Low-Stock');
+                                console.log(lowStockProducts);
+                                //Looping through User data
+                                const arrstockLow = lowStockProducts;
+                                console.log(">>>", arr);
+                                let lowStockcounter = 1;
+                                arrstockLow.forEach((user, index) => {
+                                    if (Object.values(user).some((value) => value !== null && value !== "")) {
+                                        user.s_no = lowStockcounter;
+                                        const row = worksheetLowStock.addRow(user); // Add data in worksheet
+
+                                        // Get the stock status value for the current row
+                                        const stockStatus = user.stockStatus;
+
+                                        // Set color based on stock status
+                                        let textColor;
+                                        switch (stockStatus) {
+                                            case 'In-Stock':
+                                                textColor = '008000'; // Green color
+                                                break;
+                                            case 'Low-Stock':
+                                                textColor = 'FFA500'; // Orange color
+                                                break;
+                                            case 'Out-Stock':
+                                                textColor = 'FF0000'; // Red color
+                                                break;
+                                            default:
+                                                textColor = '000000'; // Black color (default)
+                                                break;
+                                        }
+
+                                        // Apply the color to the cells in the current row
+                                        row.eachCell((cell) => {
+                                            cell.font = {
+                                                color: {
+                                                    argb: textColor
+                                                }
+                                            };
+                                        });
+
+                                        lowStockcounter++;
+                                    }
+                                });
+                                // Making first line in excel bold
+                                worksheetLowStock.getRow(1).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 13 }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                    height = 200
+                                });
+                                worksheetLowStock.getRow(2).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 13, color: { argb: '808080' } }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                });
+                                worksheetLowStock.getRow(1).height = 30;
+                                worksheetLowStock.getRow(2).height = 20;
+                                worksheetLowStock.getRow(arrstockLow.length + 3).values = ['Total:', '', '', '', { formula: `SUM(E3:E${arrstockLow.length + 2})` }, '', { formula: `SUM(G3:G${arrstockLow.length + 2})` }, '', { formula: `SUM(I3:I${arrstockLow.length + 2})` }];
+
+                                worksheetLowStock.getRow(arrstockLow.length + 3).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 14, color: { argb: '808080' } }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                })
+                                worksheetLowStock.eachRow((row) => {
+                                    row.eachCell((cell) => {
+                                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                                        row.height = 20
+                                    });
+                                });
+
+                                const worksheetOutStock = workbook.addWorksheet("Out Stock"); // New Worksheet
+
+                                if (req.query.startDate && req.query.endDate) {
+                                    worksheetOutStock.mergeCells('A1', 'N1');
+                                    worksheetOutStock.getCell('A1').value = `Out-Stock Product List From ${data.startDate} To ${data.endDate}`;
+                                } else {
+                                    worksheetOutStock.mergeCells('A1', 'N1');
+                                    worksheetOutStock.getCell('A1').value = `Out-Stock Product List From ${firstDay} To ${lastDay}`;
+                                }
+
+                                /*Column headers*/
+                                worksheetOutStock.getRow(2).values = headersNameList;
+
+                                // Column for data in excel. key must match data key
+                                worksheetOutStock.columns = columnsArray;
+
+                                const outStockProducts = rows.filter(product => product.stockStatus === 'Out-Stock');
+                                console.log(outStockProducts);
+                                //Looping through User data
+                                const arrstockOut = outStockProducts;
+                                console.log(">>>", arr);
+                                let outStockcounter = 1;
+                                arrstockOut.forEach((user, index) => {
+                                    user.s_no = outStockcounter;
+                                    const row = worksheetOutStock.addRow(user); // Add data in worksheet
+
+                                    // Get the stock status value for the current row
+                                    const stockStatus = user.stockStatus;
+
+                                    // Set color based on stock status
+                                    let textColor;
+                                    switch (stockStatus) {
+                                        case 'In-Stock':
+                                            textColor = '008000'; // Green color
+                                            break;
+                                        case 'Low-Stock':
+                                            textColor = 'FFA500'; // Orange color
+                                            break;
+                                        case 'Out-Stock':
+                                            textColor = 'FF0000'; // Red color
+                                            break;
+                                        default:
+                                            textColor = '000000'; // Black color (default)
+                                            break;
+                                    }
+
+                                    // Apply the color to the cells in the current row
+                                    row.eachCell((cell) => {
+                                        cell.font = {
+                                            color: {
+                                                argb: textColor
+                                            }
+                                        };
+                                    });
+
+                                    outStockcounter++;
+                                });
+                                // Making first line in excel bold
+                                worksheetOutStock.getRow(1).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 13 }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                    height = 200
+                                });
+                                worksheetOutStock.getRow(2).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 13, color: { argb: '808080' } }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                });
+                                worksheetOutStock.getRow(1).height = 30;
+                                worksheetOutStock.getRow(2).height = 20;
+                                worksheetOutStock.getRow(arrstockOut.length + 3).values = ['Total:', '', '', '', { formula: `SUM(E3:E${arrstockOut.length + 2})` }, '', { formula: `SUM(G3:G${arrstockOut.length + 2})` }, '', { formula: `SUM(I3:I${arrstockOut.length + 2})` }];
+
+                                worksheetOutStock.getRow(arrstockOut.length + 3).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 14, color: { argb: '808080' } }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                })
+                                worksheetOutStock.eachRow((row) => {
+                                    row.eachCell((cell) => {
+                                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                                        row.height = 20
+                                    });
+                                });
+
+                                // Check Sheet
+
+                                const worksheetChkStock = workbook.addWorksheet("Check Stock"); // New Worksheet
+
+                                if (req.query.startDate && req.query.endDate) {
+                                    worksheetChkStock.mergeCells('A1', 'F1');
+                                    worksheetChkStock.getCell('A1').value = `Product List From ${data.startDate} To ${data.endDate}`;
+                                } else {
+                                    worksheetChkStock.mergeCells('A1', 'F1');
+                                    worksheetChkStock.getCell('A1').value = `Product List From ${firstDay} To ${lastDay}`;
+                                }
+
+                                /*Column headers*/
+                                worksheetChkStock.getRow(2).values = ['Sr. No', 'Product Name', 'પ્રોડક્ટ નામ', 'Remain Stock', 'Min Qty', 'Status'];
+
+                                // Column for data in excel. key must match data key
+                                worksheetChkStock.columns = [
+                                    { key: "s_no", width: 10, },
+                                    { key: "productName", width: 30 },
+                                    { key: "gujProductName", width: 30 },
+                                    { key: "remainingStock", width: 40 },
+                                    { key: "minProductQty", width: 20 },
+                                    { key: "stockStatus", width: 30 }
+                                ];
+
+                                //Looping through User data
+                                const arrstockChk = rows;
+                                let chkCounter = 1;
+                                arrstockChk.forEach((user, index) => {
+                                    user.s_no = chkCounter;
+                                    const row = worksheetChkStock.addRow(user); // Add data in worksheet
+
+                                    // Get the stock status value for the current row
+                                    const stockStatus = user.stockStatus;
+
+                                    // Set color based on stock status
+                                    let textColor;
+                                    switch (stockStatus) {
+                                        case 'In-Stock':
+                                            textColor = '008000'; // Green color
+                                            break;
+                                        case 'Low-Stock':
+                                            textColor = 'FFA500'; // Orange color
+                                            break;
+                                        case 'Out-Stock':
+                                            textColor = 'FF0000'; // Red color
+                                            break;
+                                        default:
+                                            textColor = '000000'; // Black color (default)
+                                            break;
+                                    }
+
+                                    // Apply the color to the cells in the current row
+                                    row.eachCell((cell) => {
+                                        cell.font = {
+                                            color: {
+                                                argb: textColor
+                                            }
+                                        };
+                                    });
+
+                                    chkCounter++;
+                                });
+                                // Making first line in excel bold
+                                worksheetChkStock.getRow(1).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 13 }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                    height = 200
+                                });
+                                worksheetChkStock.getRow(2).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 13, color: { argb: '808080' } }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                });
+                                worksheetChkStock.getRow(1).height = 30;
+                                worksheetChkStock.getRow(2).height = 20;
+
+                                worksheetChkStock.getRow(arrstockChk.length + 3).eachCell((cell) => {
+                                    cell.font = { bold: true, size: 14, color: { argb: '808080' } }
+                                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                })
+                                worksheetChkStock.eachRow((row) => {
+                                    row.eachCell((cell) => {
+                                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                                        row.height = 20
+                                    });
+                                });
+                                try {
+                                    const data = await workbook.xlsx.writeBuffer()
+                                    var fileName = new Date().toString().slice(4, 15) + ".xlsx";
+                                    console.log(">>>", fileName);
+                                    // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                                    // res.addHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename="+ fileName)
+                                    res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                    res.type = 'blob';
+                                    res.send(data)
+                                    // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                                    // res.setHeader("Content-Disposition", "attachment; filename=" + "Report.xlsx");
+                                    // workbook.xlsx.write(res)
+                                    // .then((data)=>{
+                                    //     res.end();
+                                    //         console.log('File write done........');
+                                    //     });
+                                } catch (err) {
+                                    throw new Error(err);
+                                }
+                            }).catch(error => {
+                                console.error('Error in processing datas :', error);
+                                return res.status(500).send('Internal Error');
+                            });
+                    }).catch(error => {
+                        console.error('Error in processing datas :', error);
+                        return res.status(500).send('Internal Error');
+                    });
+            })
+        } else {
+            return res.status(401).send("BranchId Not Found");
+        }
+    } else {
+        return res.status(401).send("Please Login Firest.....!");
+    }
+};
+
+// Export PDF For Products List
+
+async function createPDF(res, datas, tableHeading) {
+    try {
+        // Create a new PDF document
+        console.log(';;;;;;', datas);
+        console.log('?????', tableHeading);
+        const doc = new jsPDF();
+
+        // JSON data
+        const jsonData = datas;
+        // console.log(jsonData);
+
+        // Get the keys from the first JSON object to set as columns
+        const keys = Object.keys(jsonData[0]);
+
+        // Define columns for the auto table, including a "Serial No." column
+        const columns = [
+            { header: 'Sr.', dataKey: 'serialNo' }, // Add Serial No. column
+            ...keys.map(key => ({ header: key, dataKey: key }))
+        ]
+
+        // Convert JSON data to an array of arrays (table rows) and add a serial number
+        const data = jsonData.map((item, index) => [index + 1, ...keys.map(key => item[key]), '', '']);
+
+        // Add auto table to the PDF document
+        doc.text(15, 15, tableHeading);
+        doc.autoTable({
+            startY: 20,
+            head: [columns.map(col => col.header)], // Extract headers correctly
+            body: data,
+            theme: 'grid',
+            didParseCell: function (data) {
+                const columnIndex = data.column.index;
+                const rowIndex = data.row.index - 1; // Adjust for header row
+
+                if (columnIndex === 9) { // Assuming 'Type' is in the sixth column (index 5)
+                    const type = data.cell.raw;
+
+                    if (type === 'In-Stock') {
+                        data.cell.styles.textColor = [0, 128, 0]; // Green color for 'CREDIT'
+                    } else if (type === 'Out-Stock') {
+                        data.cell.styles.textColor = [255, 0, 0]; // Red color for 'DEBIT'
+                    } else if (type === 'Low-Stock') {
+                        data.cell.styles.textColor = [255, 165, 0]; // Orange color for 'CREDIT'
+                    }
+                }
+            },
+            styles: {
+                cellPadding: 2, // Add padding to cells for better appearance
+                halign: 'center', // Horizontally center-align content
+                fontSize: 10,
+                lineColor: [0, 0, 0], // Border color
+                lineWidth: 0.1, // Border width
+            }
+        });
+        const pdfBytes = await doc.output();
+        const fileName = 'jane-doe.pdf'; // Set the desired file name
+
+        // Set the response headers for the PDF download
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Type', 'application/pdf');
+
+        // Stream the PDF to the client for download
+        res.send(pdfBytes);
+
+
+        // Save the PDF to a file
+        // const pdfFilename = 'output.pdf';
+        // fs.writeFileSync(pdfFilename, doc.output());
+        // console.log(`PDF saved as ${pdfFilename}`);
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+const exportPdfForAllProductsData = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+            if (branchId) {
+                var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+                var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+                var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+                const data = {
+                    startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                    endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                    productStatus: req.query.productStatus,
+                    productCategory: req.query.productCategory
+                }
+                const sql_querry_staticQuery = `SELECT
+                                                p.productId,
+                                                UCASE(p.productName) AS productName,
+                                                gujaratiProductName AS gujProductName,
+                                                CONCAT(p.minProductQty,' ',p.minProductUnit) AS minProductQty,
+                                                p.minProductUnit,
+                                                CONCAT(p.leadTime,' ','Day') AS leadTime,
+                                                p.isExpired,
+                                                CONCAT(p.expiredDays,' ','Day') AS expiredDays,
+                                                COALESCE(si.total_quantity, 0) AS purchese,
+                                                COALESCE(so.total_quantity, 0) AS totalUsed,
+                                                COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS remainingStock,
+                                                COALESCE(ROUND(siLu.productPrice,2), 0) AS lastPrice,
+                                                COALESCE(siLu.productQty,'No In') AS lastUpdatedQty,
+                                                COALESCE(siLu.totalPrice, 0) AS totalPrice,
+                                                COALESCE(
+                                                    DATE_FORMAT(siLu.stockInDate, '%d-%m-%Y'),
+                                                    "No Update"
+                                                ) AS lastUpdatedStockInDate,
+                                                CASE WHEN COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty THEN 'In-Stock' WHEN COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0 THEN 'Low-Stock' ELSE 'Out-Stock'
+                                            END AS stockStatus
+                                            FROM
+                                                inventory_product_data AS p
+                                            LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE branchId = '${branchId}'
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS si
+                                            ON
+                                                p.productId = si.productId
+                                            LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockOut_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockOut_data.productQty
+                                                    ),2) AS total_quantity
+                                                FROM
+                                                    inventory_stockOut_data
+                                                WHERE branchId = '${branchId}'
+                                                GROUP BY
+                                                    inventory_stockOut_data.productId
+                                            ) AS so
+                                            ON
+                                                p.productId = so.productId
+                                            LEFT JOIN(
+                                                SELECT
+                                                    productId,
+                                                    stockInDate,
+                                                    COALESCE(CONCAT(stockInDisplayQty,' ',stockInDisplayUnit),'No IN') AS productQty,
+                                                    productPrice,
+                                                    totalPrice
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE branchId = '${branchId}' AND
+                                                    (productId, stockInCreationDate) IN(
+                                                    SELECT
+                                                        productId,
+                                                        MAX(stockInCreationDate)
+                                                    FROM
+                                                        inventory_stockIn_data
+                                                    GROUP BY
+                                                        productId
+                                                )
+                                            ) AS siLu
+                                            ON
+                                                p.productId = siLu.productId`;
+                const sql_querry_getMwSiSO = `SELECT
+                                                p.productId,
+                                                UCASE(p.productName) AS productName,
+                                                gujaratiProductName AS gujProductName,
+                                                CONCAT(p.minProductQty,' ',p.minProductUnit) AS minProductQty,
+                                                p.minProductUnit,
+                                                CONCAT(p.leadTime,' ','Day') AS leadTime,
+                                                p.isExpired,
+                                                CONCAT(p.expiredDays,' ','Day') AS expiredDays,
+                                                COALESCE(simw.total_quantity, 0) AS purchese,
+                                                COALESCE(somw.total_quantity, 0) AS totalUsed,
+                                                COALESCE(simw.totalExpense,0) AS totalExpense,
+                                                COALESCE(somw.totalStockOutPrice,0) AS totalStockOutPrice,
+                                                COALESCE(si.total_siPrice, 0) - COALESCE(so.total_soPrice, 0) AS remainPrice,
+                                                COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS remainingStock,
+                                                COALESCE(ROUND(siLu.productPrice,2), 0) AS lastPrice,
+                                                COALESCE(siLu.productQty,'No In') AS lastUpdatedQty,
+                                                COALESCE(siLu.totalPrice, 0) AS totalPrice,
+                                                COALESCE(
+                                                    DATE_FORMAT(siLu.stockInDate, '%d-%m-%Y'),
+                                                    "No Update"
+                                                ) AS lastUpdatedStockInDate,
+                                                CASE WHEN COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty THEN 'In-Stock' WHEN COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0 THEN 'Low-Stock' ELSE 'Out-Stock'
+                                            END AS stockStatus
+                                            FROM
+                                                inventory_product_data AS p
+                                            LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.totalPrice
+                                                    ),2) AS total_siPrice
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE branchId = '${branchId}'
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS si
+                                            ON
+                                                p.productId = si.productId
+                                            LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockOut_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockOut_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockOut_data.stockOutPrice
+                                                    ),2) AS total_soPrice
+                                                FROM
+                                                    inventory_stockOut_data
+                                                WHERE branchId = '${branchId}'
+                                                GROUP BY
+                                                    inventory_stockOut_data.productId
+                                            ) AS so
+                                            ON
+                                                p.productId = so.productId
+                                            LEFT JOIN(
+                                                SELECT
+                                                    productId,
+                                                    stockInDate,
+                                                    CONCAT(stockInDisplayQty,' ',stockInDisplayUnit) AS productQty,
+                                                    productPrice,
+                                                    totalPrice
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE branchId = '${branchId}' AND
+                                                    (productId, stockInCreationDate) IN(
+                                                    SELECT
+                                                        productId,
+                                                        MAX(stockInCreationDate) As lastDate
+                                                    FROM
+                                                        inventory_stockIn_data
+                                                    GROUP BY
+                                                        productId
+                                                )
+                                            ) AS siLu
+                                            ON
+                                                p.productId = siLu.productId`;
+                if (req.query.productCategory) {
+                    if (req.query.productStatus == 1) {
+                        sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE p.productCategoryId = '${data.productCategory}' AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty 
+                                                ORDER BY p.productName`;
+                    } else if (req.query.productStatus == 2) {
+                        sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE p.productCategoryId = '${data.productCategory}' AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0
+                                                ORDER BY p.productName`;
+                    } else if (req.query.productStatus == 3) {
+                        sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE p.productCategoryId = '${data.productCategory}' AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) = 0
+                                                ORDER BY p.productName`;
+                    } else if (req.query.startDate && req.query.endDate) {
+                        sql_queries_getdetails = `${sql_querry_getMwSiSO}
+                                              LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.totalPrice
+                                                    )) AS totalExpense
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE
+                                                 inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS simw
+                                            ON
+                                            p.productId = simw.productId
+                                        LEFT JOIN(
+                                            SELECT
+                                                inventory_stockOut_data.productId,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.productQty
+                                                ),2) AS total_quantity,
+                                                ROUND(SUM(
+                                                        inventory_stockOut_data.stockOutPrice
+                                                )) AS totalStockOutPrice
+                                            FROM
+                                                inventory_stockOut_data
+                                            WHERE
+                                               inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                            GROUP BY
+                                                inventory_stockOut_data.productId
+                                        ) AS somw
+                                        ON
+                                        p.productId = somw.productId
+                                        WHERE p.productCategoryId = '${data.productCategory}'
+                                        ORDER BY p.productName`;
+                    } else {
+                        sql_queries_getdetails = `${sql_querry_getMwSiSO}
+                                              LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.totalPrice
+                                                    )) AS totalExpense
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE
+                                                    inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS simw
+                                            ON
+                                            p.productId = simw.productId
+                                        LEFT JOIN(
+                                            SELECT
+                                                inventory_stockOut_data.productId,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.productQty
+                                                ),2) AS total_quantity,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.stockOutPrice
+                                                )) AS totalStockOutPrice
+                                            FROM
+                                                inventory_stockOut_data
+                                            WHERE
+                                                inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                            GROUP BY
+                                                inventory_stockOut_data.productId
+                                        ) AS somw
+                                        ON
+                                        p.productId = somw.productId
+                                        WHERE p.productCategoryId = '${data.productCategory}'
+                                        ORDER BY p.productName`;
+                    }
+                } else {
+                    if (req.query.productStatus == 1) {
+                        sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minProductQty 
+                                                ORDER BY p.productName`;
+                    } else if (req.query.productStatus == 2) {
+                        sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0
+                                                ORDER BY p.productName`;
+                    } else if (req.query.productStatus == 3) {
+                        sql_queries_getdetails = `${sql_querry_staticQuery}
+                                                WHERE COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) = 0
+                                                ORDER BY p.productName`;
+                    } else if (req.query.startDate && req.query.endDate) {
+                        sql_queries_getdetails = `${sql_querry_getMwSiSO}
+                                              LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.totalPrice
+                                                    )) AS totalExpense
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE
+                                                 inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS simw
+                                            ON
+                                            p.productId = simw.productId
+                                        LEFT JOIN(
+                                            SELECT
+                                                inventory_stockOut_data.productId,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.productQty
+                                                ),2) AS total_quantity,
+                                                ROUND(SUM(
+                                                        inventory_stockOut_data.stockOutPrice
+                                                )) AS totalStockOutPrice
+                                            FROM
+                                                inventory_stockOut_data
+                                            WHERE
+                                               inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                            GROUP BY
+                                                inventory_stockOut_data.productId
+                                        ) AS somw
+                                        ON
+                                        p.productId = somw.productId
+                                        ORDER BY p.productName`;
+                    } else {
+                        sql_queries_getdetails = `${sql_querry_getMwSiSO}
+                                              LEFT JOIN(
+                                                SELECT
+                                                    inventory_stockIn_data.productId,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.productQty
+                                                    ),2) AS total_quantity,
+                                                    ROUND(SUM(
+                                                        inventory_stockIn_data.totalPrice
+                                                    )) AS totalExpense
+                                                FROM
+                                                    inventory_stockIn_data
+                                                WHERE
+                                                    inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                GROUP BY
+                                                    inventory_stockIn_data.productId
+                                            ) AS simw
+                                            ON
+                                            p.productId = simw.productId
+                                        LEFT JOIN(
+                                            SELECT
+                                                inventory_stockOut_data.productId,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.productQty
+                                                ),2) AS total_quantity,
+                                                ROUND(SUM(
+                                                    inventory_stockOut_data.stockOutPrice
+                                                )) AS totalStockOutPrice
+                                            FROM
+                                                inventory_stockOut_data
+                                            WHERE
+                                                inventory_stockOut_data.branchId = '${branchId}' AND inventory_stockOut_data.stockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                            GROUP BY
+                                                inventory_stockOut_data.productId
+                                        ) AS somw
+                                        ON
+                                        p.productId = somw.productId
+                                        ORDER BY p.productName`;
+                    }
+                }
+                pool.query(sql_queries_getdetails, (err, rows) => {
+                    if (err) {
+                        console.error("An error occurd in SQL Queery", err);
+                        return res.status(500).send('Database Error');
+                    } else if (rows && rows.length <= 0) {
+                        return res.status(400).send('No Data Found');
+                    } else {
+                        const datas = Object.values(JSON.parse(JSON.stringify(rows)));
+                        processDatas(datas)
+                            .then((data) => {
+                                console.log('json 1', datas);
+                                console.log('json 2', data);
+                                const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity, allConversation: data[index].vikJson } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit, allConversation: data[index].vikJson },
+                                    // console.log(data[index] && data[index].convertedQuantity)
+                                ) : []
+                                let newData = [];
+                                Promise.all(
+                                    rows ? rows.map(async (element, index) => {
+                                        let newElement = element;
+                                        return await newConversationAsync(element.purchese, element.productId, element.minProductUnit)
+                                            .then(async (res) => {
+                                                newElement = { ...newElement, purchese: res }
+                                                return await newConversationAsync(element.totalUsed, element.productId, element.minProductUnit)
+                                                    .then((res) => {
+                                                        newElement = { ...newElement, totalUsed: res }
+                                                        newData.push(newElement)
+                                                        return newElement
+                                                    }).catch(error => {
+                                                        console.error('Error in processing datas :', error);
+                                                        return res.status(500).send('Internal Error');
+                                                    });
+                                            }).catch(error => {
+                                                console.error('Error in processing datas :', error);
+                                                return res.status(500).send('Internal Error');
+                                            });
+                                    }) : [])
+                                    .then((rows) => {
+                                        console.log(rows);
+                                        const extractedData = rows.map(product => {
+                                            return {
+                                                "Product Name": product.productName,
+                                                "Total Purchese": product.purchese,
+                                                "Total Used": product.totalUsed,
+                                                "Remaining": product.remainingStock,
+                                                "Last In Qty": product.lastUpdatedQty,
+                                                "Last Total Price": parseFloat(product.totalPrice).toLocaleString('en-IN'),
+                                                "Product Price": product.lastPrice,
+                                                "Last In Date": product.lastUpdatedStockInDate,
+                                                "Status": product.stockStatus
+                                            };
+                                        });
+                                        const abc = extractedData;
+
+                                        if (req.query.startDate && req.query.endDate) {
+                                            tableHeading = `Product Data From ${data.startDate} To ${data.endDate}`;
+                                        } else {
+                                            tableHeading = `Product Data From ${firstDay} To ${lastDay}`;
+                                        }
+
+                                        createPDF(res, abc, tableHeading)
+                                            .then(() => {
+                                                console.log('PDF created successfully');
+                                                res.status(200);
+                                            })
+                                            .catch((err) => {
+                                                console.log(err);
+                                                res.status(500).send('Error creating PDF');
+                                            });
+                                    }).catch(error => {
+                                        console.error('Error in processing datas :', error);
+                                        return res.status(500).send('Internal Error');
+                                    });
+                            }).catch(error => {
+                                console.error('Error in processing datas :', error);
+                                return res.status(500).send('Internal Error');
+                            });
+                    }
+                });
+            } else {
+                return res.status(401).send("BranchId Not Found");
+            }
+        } else {
+            return res.status(401).send("Please Login Firest.....!");
+        }
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
     }
 }
 
@@ -2606,5 +3216,6 @@ module.exports = {
     exportExcelSheetForProductTable,
     getProductDetailsById,
     getCategoryWiseUsedByProduct,
-    getUnitPreferenceById
+    getUnitPreferenceById,
+    exportPdfForAllProductsData
 }

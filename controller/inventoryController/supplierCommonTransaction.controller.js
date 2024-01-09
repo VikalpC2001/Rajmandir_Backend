@@ -219,7 +219,7 @@ const getOwnerDebitTransactionList = async (req, res) => {
 
 // Export Debit Transaction List
 
-const exportExcelSheetForDebitTransactionList = (req, res) => {
+const exportExcelSheetForOwnerDebitTransactionList = (req, res) => {
 
     var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
     var firstDay = new Date(y, m, 1).toString().slice(4, 15);
@@ -414,7 +414,7 @@ const getOwnerCashTransactionList = async (req, res) => {
 
 // Export Cash Transaction List
 
-const exportExcelSheetForCashTransactionList = (req, res) => {
+const exportExcelSheetForOwnerCashTransactionList = (req, res) => {
 
     var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
     var firstDay = new Date(y, m, 1).toString().slice(4, 15);
@@ -526,7 +526,7 @@ const exportExcelSheetForCashTransactionList = (req, res) => {
     })
 };
 
-const exportExcelSheetForDeditTransaction = (req, res) => {
+const exportExcelSheetForOwnerDeditTransaction = (req, res) => {
 
     var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
     var firstDay = new Date(y, m, 1).toString().slice(4, 15);
@@ -656,8 +656,8 @@ async function createPDF(res, data) {
             transactionDate: data[0].transactionDate ? data[0].transactionDate : '',
             transactionTime: data[0].transactionTime ? data[0].transactionTime : '',
         }
-        const document = await PDFDocument.load(readFileSync(process.env.INVOICE_BHAGWATI_URL));
-        console.log('>>?>>?>?>?', process.env.INVOICE_BHAGWATI_URL)
+        const document = await PDFDocument.load(readFileSync(process.env.INVOICE_RAJMANDIR_URL));
+        console.log('>>?>>?>?>?', process.env.INVOICE_RAJMANDIR_URL)
         const helveticaFont = await document.embedFont(StandardFonts.Helvetica);
         const HelveticaBold = await document.embedFont(StandardFonts.HelveticaBold);
         const firstPage = document.getPage(0);
@@ -669,19 +669,19 @@ async function createPDF(res, data) {
         const draftImage = await document.embedPng(draftImageData);
 
         // Draw the image on the desired page
-        const draftImageDims = draftImage.scale(0.6); // Adjust the scale as needed
+        const draftImageDims = draftImage.scale(0.1); // Adjust the scale as needed
         firstPage.drawImage(draftImage, {
             x: 50, // Adjust the X position as needed
-            y: 100, // Adjust the Y position as needed
-            width: draftImageDims.width + 50,
-            height: draftImageDims.height + 100,
-            opacity: 0.09, // Apply transparency (0.0 to 1.0)
+            y: 440, // Adjust the Y position as needed
+            width: draftImageDims.width + 10,
+            height: draftImageDims.height + 10,
+            opacity: 0.07, // Apply transparency (0.0 to 1.0)
         });
 
         firstPage.moveTo(105, 530);
         firstPage.drawText(details.invoiceNumber, {
             x: 140,
-            y: 635,
+            y: 645,
             size: 10,
             fontSize: 100,
             font: HelveticaBold
@@ -689,21 +689,21 @@ async function createPDF(res, data) {
 
         firstPage.drawText(details.transactionDate, {
             x: 140,
-            y: 621,
+            y: 631,
             size: 9,
             font: helveticaFont
         })
 
         firstPage.drawText(details.transactionTime, {
             x: 140,
-            y: 606,
+            y: 616,
             size: 9,
             font: helveticaFont
         })
 
         firstPage.drawText(details.supplierFirmName, {
             x: 300,
-            y: 635,
+            y: 645,
             size: 10,
             fontSize: 100,
             font: HelveticaBold
@@ -711,14 +711,14 @@ async function createPDF(res, data) {
 
         firstPage.drawText(details.suppliertName, {
             x: 300,
-            y: 621,
+            y: 631,
             size: 9,
             font: helveticaFont
         })
 
         firstPage.drawText(details.supplierPhoneNumber, {
             x: 300,
-            y: 606,
+            y: 616,
             size: 9,
             font: helveticaFont
         })
@@ -784,8 +784,9 @@ async function createPDF(res, data) {
     // writeFileSync("jane-doe.pdf", await document.save());
 }
 
-const exportTransactionInvoice = async (req, res) => {
+const exportTransactionInvoiceData = async (req, res) => {
     try {
+        console.log('hyyy');
         const transactionId = req.query.transactionId;
         const sql_queries_getInvoiceDetails = `SELECT RIGHT(supplierTransactionId,9) AS invoiceNumber,CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS paidBy, sd.suppliertName, sd.supplierFirmName, sd.supplierPhoneNumber,receivedBy, pendingAmount, paidAmount, (pendingAmount - paidAmount) AS remainingAmount, transactionNote, DATE_FORMAT(transactionDate,'%d %M %Y, %W') AS transactionDate, DATE_FORMAT(supplierTransactionCreationDate,'%h:%i %p') AS transactionTime FROM inventory_supplierTransaction_data AS istd
                                                 INNER JOIN user_details ON user_details.userId = istd.UserId
@@ -825,5 +826,9 @@ module.exports = {
     getOwnerDebitTransactionList,
     getOwnerCashTransactionList,
     getOwnerCashTransactionCounter,
-    getOwnerDebitTransactionCounter
+    getOwnerDebitTransactionCounter,
+    exportExcelSheetForOwnerDebitTransactionList,
+    exportExcelSheetForOwnerDeditTransaction,
+    exportExcelSheetForOwnerCashTransactionList,
+    exportTransactionInvoiceData
 }

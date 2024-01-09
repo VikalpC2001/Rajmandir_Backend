@@ -698,181 +698,204 @@ const updateSupplierDetails = async (req, res) => {
 }
 
 const exportExcelSheetForAllProductBySupplierId = (req, res) => {
+    let token;
+    token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+    if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+        if (branchId) {
+            var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+            var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+            var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
 
-    var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
-    var firstDay = new Date(y, m, 1).toString().slice(4, 15);
-    var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
-
-    const data = {
-        startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
-        endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
-        supplierId: req.query.supplierId,
-    }
-    const commaonQuery = `SELECT
-                            sp.productId,
-                                pd.productName,
-                                CONCAT(COALESCE(si.total_quantity, 0),' ',pd.unit) AS productQuantity,
-                                COALESCE(si.total_expense, 0) AS totalExpense,
-                                CONCAT(COALESCE(siLu.productQty, 0),' ',pd.unit) AS lastStockIN,
-                                COALESCE(siLu.productPrice, 0) AS lastUpdatedPrice,
-                                COALESCE(DATE_FORMAT(siLu.stockInDate,'%d-%M-%Y'), 'No Update') AS lastStockedInAt
-                            FROM
-                                inventory_supplierProducts_data AS sp
-                            INNER JOIN(
-                                SELECT
-                                    inventory_product_data.productId,
-                                inventory_product_data.productName,
-                                inventory_product_data.minProductUnit AS unit
-                                FROM
-                                    inventory_product_data
-                            ) AS pd
-                            ON
-                            sp.productId = pd.productId
-                            LEFT JOIN(
-                                SELECT
-                                    productId,
-                                    stockInDate,
-                                    productQty,
-                                    productPrice
-                                FROM
-                                    inventory_stockIn_data
-                                WHERE
-                                    (productId, stockInCreationDate) IN(
-                                        SELECT
-                                        productId,
-                                        MAX(stockInCreationDate)
+            const data = {
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                supplierId: req.query.supplierId,
+            }
+            const commaonQuery = `SELECT
+                                        sp.productId,
+                                        pd.productName,
+                                        COALESCE(si.total_quantity, 0) AS remainingStock,
+                                        COALESCE(si.total_expense, 0) AS totalExpense,
+                                        COALESCE(siLu.productQty, 0) AS lastStockIN,
+                                        COALESCE(siLu.productPrice, 0) AS lastUpdatedPrice,
+                                        COALESCE(DATE_FORMAT(siLu.stockInDate,'%d-%m-%Y'), 'No Update') AS lastStockdInAt,
+                                        pd.unit AS minProductUnit
                                     FROM
-                                        inventory_stockIn_data
-                                    WHERE
-                                        inventory_stockIn_data.supplierId = '${data.supplierId}'
-                                    GROUP BY
-                                        productId
-                                    )
-                            ) AS siLu
-                            ON
-                            sp.productId = siLu.productId`;
-    if (req.query.startDate && req.query.endDate) {
-        sql_querry_getAllProductBysupplier = `${commaonQuery}
-                                                LEFT JOIN(
-                                                    SELECT
-                                                        inventory_stockIn_data.productId,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.productQty
-                                                    ),2) AS total_quantity,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.totalPrice
-                                                    )) AS total_expense
-                                                    FROM
-                                                        inventory_stockIn_data
-                                                    WHERE
-                                                        inventory_stockIn_data.supplierId = '${data.supplierId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
-                                                    GROUP BY
-                                                        inventory_stockIn_data.productId
-                                                ) AS si
-                                                ON
-                                                sp.productId = si.productId
-                                                WHERE sp.supplierId = '${data.supplierId}'
-                                                ORDER BY pd.productName`;
-    } else {
-        sql_querry_getAllProductBysupplier = `${commaonQuery}
-                                                LEFT JOIN(
-                                                    SELECT
-                                                        inventory_stockIn_data.productId,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.productQty
-                                                    ),2) AS total_quantity,
-                                                    ROUND(SUM(
-                                                        inventory_stockIn_data.totalPrice
-                                                    )) AS total_expense
-                                                    FROM
-                                                        inventory_stockIn_data
-                                                    WHERE
-                                                        inventory_stockIn_data.supplierId = '${data.supplierId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
-                                                    GROUP BY
-                                                        inventory_stockIn_data.productId
-                                                ) AS si
-                                                ON
-                                                sp.productId = si.productId
-                                                WHERE sp.supplierId = '${data.supplierId}'
-                                                ORDER BY pd.productName`;
-    }
-    pool.query(sql_querry_getAllProductBysupplier, async (err, rows) => {
-        if (err) return res.status(404).send(err);
-        const workbook = new excelJS.Workbook();  // Create a new workbook
-        const worksheet = workbook.addWorksheet("StockIn List"); // New Worksheet
+                                        inventory_supplierProducts_data AS sp
+                                    INNER JOIN(
+                                        SELECT
+                                            inventory_product_data.productId,
+                                        inventory_product_data.productName,
+                                        inventory_product_data.minProductUnit AS unit
+                                        FROM
+                                            inventory_product_data
+                                    ) AS pd
+                                    ON
+                                    sp.productId = pd.productId
+                                    LEFT JOIN(
+                                        SELECT
+                                            productId,
+                                            stockInDate,
+                                            productQty,
+                                            productPrice
+                                        FROM
+                                            inventory_stockIn_data
+                                        WHERE
+                                            (productId, stockInCreationDate) IN(
+                                                SELECT
+                                                productId,
+                                                MAX(stockInCreationDate)
+                                            FROM
+                                                inventory_stockIn_data
+                                            WHERE
+                                                inventory_stockIn_data.supplierId = '${data.supplierId}'
+                                            GROUP BY
+                                                productId
+                                            )
+                                    ) AS siLu
+                                    ON
+                                    sp.productId = siLu.productId`;
+            if (req.query.startDate && req.query.endDate) {
+                sql_querry_getAllProductBysupplier = `${commaonQuery}
+                                                        LEFT JOIN(
+                                                            SELECT
+                                                                inventory_stockIn_data.productId,
+                                                            ROUND(SUM(
+                                                                inventory_stockIn_data.productQty
+                                                            ),2) AS total_quantity,
+                                                            ROUND(SUM(
+                                                                inventory_stockIn_data.totalPrice
+                                                            )) AS total_expense
+                                                            FROM
+                                                                inventory_stockIn_data
+                                                            WHERE
+                                                                inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.supplierId = '${data.supplierId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                            GROUP BY
+                                                                inventory_stockIn_data.productId
+                                                        ) AS si
+                                                        ON
+                                                        sp.productId = si.productId
+                                                        WHERE sp.supplierId = '${data.supplierId}'
+                                                        ORDER BY pd.productName`;
+            } else {
+                sql_querry_getAllProductBysupplier = `${commaonQuery}
+                                                        LEFT JOIN(
+                                                              SELECT
+                                                                  inventory_stockIn_data.productId,
+                                                              ROUND(SUM(
+                                                                  inventory_stockIn_data.productQty
+                                                              ),2) AS total_quantity,
+                                                              ROUND(SUM(
+                                                                  inventory_stockIn_data.totalPrice
+                                                              )) AS total_expense
+                                                              FROM
+                                                                  inventory_stockIn_data
+                                                              WHERE
+                                                                  inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.supplierId = '${data.supplierId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                              GROUP BY
+                                                                  inventory_stockIn_data.productId
+                                                          ) AS si
+                                                        ON
+                                                          sp.productId = si.productId
+                                                          WHERE sp.supplierId = '${data.supplierId}'
+                                                          ORDER BY pd.productName`;
+            }
+            pool.query(sql_querry_getAllProductBysupplier, async (err, rows) => {
+                if (err) return res.status(404).send(err);
+                const datas = Object.values(JSON.parse(JSON.stringify(rows)));
+                await processDatas(datas)
+                    .then(async (data) => {
+                        console.log('json 1', datas);
+                        console.log('json 2', data);
+                        const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
+                        ) : []
+                        const workbook = new excelJS.Workbook();  // Create a new workbook
+                        const worksheet = workbook.addWorksheet("StockIn List"); // New Worksheet
 
-        if (req.query.startDate && req.query.endDate) {
-            worksheet.mergeCells('A1', 'G1');
-            worksheet.getCell('A1').value = `Supplier Wise Product List : ${data.startDate} To ${data.endDate}`;
+                        if (req.query.startDate && req.query.endDate) {
+                            worksheet.mergeCells('A1', 'G1');
+                            worksheet.getCell('A1').value = `Supplier Wise Product List : ${data.startDate} To ${data.endDate}`;
+                        } else {
+                            worksheet.mergeCells('A1', 'G1');
+                            worksheet.getCell('A1').value = `Supplier Wise Product List : ${firstDay} To ${lastDay}`;
+                        }
+
+                        /*Column headers*/
+                        worksheet.getRow(2).values = ['S no.', 'Product Name', 'Quantity', 'Total Expense', 'Last StockIn', 'Last Price', 'LastIn Date'];
+
+                        // Column for data in excel. key must match data key
+                        worksheet.columns = [
+                            { key: "s_no", width: 10, },
+                            { key: "productName", width: 30 },
+                            { key: "remainingStock", width: 40 },
+                            { key: "totalExpense", width: 30 },
+                            { key: "lastStockIN", width: 20 },
+                            { key: "lastUpdatedPrice", width: 20 },
+                            { key: "lastStockedInAt", width: 20 },
+                        ];
+                        //Looping through User data
+                        const arr = rows
+                        let counter = 1;
+                        arr.forEach((user, index) => {
+                            user.s_no = counter;
+                            const row = worksheet.addRow(user); // Add data in worksheet
+                            counter++;
+                        });
+                        // Making first line in excel bold
+                        worksheet.getRow(1).eachCell((cell) => {
+                            cell.font = { bold: true, size: 13 }
+                            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                            height = 200
+                        });
+                        worksheet.getRow(2).eachCell((cell) => {
+                            cell.font = { bold: true, size: 13 }
+                            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                        });
+                        worksheet.getRow(1).height = 30;
+                        worksheet.getRow(2).height = 20;
+                        worksheet.getRow(arr.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arr.length + 2})` }];
+
+                        worksheet.getRow(arr.length + 3).eachCell((cell) => {
+                            cell.font = { bold: true, size: 14 }
+                            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                        })
+                        worksheet.eachRow((row) => {
+                            row.eachCell((cell) => {
+                                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                                row.height = 20
+                            });
+                        });
+                        try {
+                            const data = await workbook.xlsx.writeBuffer()
+                            var fileName = new Date().toString().slice(4, 15) + ".xlsx";
+                            // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                            // res.addHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename="+ fileName)
+                            res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                            res.type = 'blob';
+                            res.send(data)
+                            // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                            // res.setHeader("Content-Disposition", "attachment; filename=" + "Report.xlsx");
+                            // workbook.xlsx.write(res)
+                            // .then((data)=>{
+                            //     res.end();
+                            //         console.log('File write done........');
+                            //     });
+                        } catch (err) {
+                            throw new Error(err);
+                        }
+                    }).catch(error => {
+                        console.error('Error in processing datas:', error);
+                        return res.status(500).send('Internal Error');
+                    });
+            })
         } else {
-            worksheet.mergeCells('A1', 'G1');
-            worksheet.getCell('A1').value = `Supplier Wise Product List : ${firstDay} To ${lastDay}`;
+            return res.status(401).send('BranchId Not Found');
         }
-
-        /*Column headers*/
-        worksheet.getRow(2).values = ['S no.', 'Product Name', 'Quantity', 'Total Expense', 'Last StockIn', 'Last Price', 'LastIn Date'];
-
-        // Column for data in excel. key must match data key
-        worksheet.columns = [
-            { key: "s_no", width: 10, },
-            { key: "productName", width: 30 },
-            { key: "productQuantity", width: 20 },
-            { key: "totalExpense", width: 30 },
-            { key: "lastStockIN", width: 20 },
-            { key: "lastUpdatedPrice", width: 20 },
-            { key: "lastStockedInAt", width: 20 },
-        ];
-        //Looping through User data
-        const arr = rows
-        let counter = 1;
-        arr.forEach((user, index) => {
-            user.s_no = counter;
-            const row = worksheet.addRow(user); // Add data in worksheet
-            counter++;
-        });
-        // Making first line in excel bold
-        worksheet.getRow(1).eachCell((cell) => {
-            cell.font = { bold: true, size: 13 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            height = 200
-        });
-        worksheet.getRow(2).eachCell((cell) => {
-            cell.font = { bold: true, size: 13 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        });
-        worksheet.getRow(1).height = 30;
-        worksheet.getRow(2).height = 20;
-        worksheet.getRow(arr.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arr.length + 2})` }];
-
-        worksheet.getRow(arr.length + 3).eachCell((cell) => {
-            cell.font = { bold: true, size: 14 }
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        })
-        worksheet.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                row.height = 20
-            });
-        });
-        try {
-            const data = await workbook.xlsx.writeBuffer()
-            var fileName = new Date().toString().slice(4, 15) + ".xlsx";
-            // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            // res.addHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename="+ fileName)
-            res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            res.type = 'blob';
-            res.send(data)
-            // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            // res.setHeader("Content-Disposition", "attachment; filename=" + "Report.xlsx");
-            // workbook.xlsx.write(res)
-            // .then((data)=>{
-            //     res.end();
-            //         console.log('File write done........');
-            //     });
-        } catch (err) {
-            throw new Error(err);
-        }
-    })
+    } else {
+        return res.status(401).send('Pleasr Login Firest.....!');
+    }
 };
 
 // GET Supplier All Branch Data
