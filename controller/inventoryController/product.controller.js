@@ -530,11 +530,10 @@ const addProduct = async (req, res) => {
             minProductUnit: req.body.minProductUnit.trim(),
             leadTime: req.body.leadTime ? req.body.leadTime : 0,
             isExpired: req.body.isExpired ? req.body.isExpired : false,
-            expiredDays: req.body.expiredDays ? req.body.expiredDays : 0,
-            isFactoryMade: req.body.isFactoryMade ? req.body.isFactoryMade : false
+            expiredDays: req.body.expiredDays ? req.body.expiredDays : 0
         }
         console.log(">>?>?>?>", data.productName);
-        if (!data.productName || !data.minProductQty || !data.minProductUnit) {
+        if (!data.productName || !data.productCategoryId || !data.minProductQty || !data.minProductUnit) {
             return res.status(400).send("Please Fill All The Fields");
         } else {
             req.body.productName = pool.query(`SELECT productName FROM inventory_product_data WHERE productName = '${data.productName}'`, function (err, row) {
@@ -545,8 +544,8 @@ const addProduct = async (req, res) => {
                 if (row && row.length) {
                     return res.status(400).send('Product is Already In Use');
                 } else {
-                    const sql_querry_addUser = `INSERT INTO inventory_product_data(productId, productCategoryId, productName, gujaratiProductName, minProductQty, minProductUnit, leadTime, isExpired, expiredDays, isFactoryMade)
-                                                VALUES('${productId}', '${data.productCategoryId}', '${data.productName}',  ${data.gujaratiProductName ? `'${data.gujaratiProductName}'` : null},  ${data.minProductQty}, '${data.minProductUnit}', ${data.leadTime}, ${data.isExpired}, ${data.isExpired ? `${data.expiredDays}` : 0}, ${data.isFactoryMade})`;
+                    const sql_querry_addUser = `INSERT INTO inventory_product_data(productId, productCategoryId, productName, gujaratiProductName, minProductQty, minProductUnit, leadTime, isExpired, expiredDays)
+                                                VALUES('${productId}', '${data.productCategoryId}', '${data.productName}',  ${data.gujaratiProductName ? `'${data.gujaratiProductName}'` : null},  ${data.minProductQty}, '${data.minProductUnit}', ${data.leadTime}, ${data.isExpired}, ${data.isExpired ? `${data.expiredDays}` : 0})`;
                     pool.query(sql_querry_addUser, (err, result) => {
                         if (err) {
                             console.error("An error occurd in SQL Queery", err);
@@ -1531,7 +1530,6 @@ const getProductDetailsTable = (req, res) => {
 // Remove Product API
 
 const removeProduct = async (req, res) => {
-
     try {
         var productId = req.query.productId.trim();
         req.query.productId = pool.query(`SELECT productId FROM inventory_product_data WHERE productId = '${productId}'`, (err, row) => {
@@ -1572,8 +1570,7 @@ const updateProduct = async (req, res) => {
             minProductUnit: req.body.minProductUnit.trim(),
             leadTime: req.body.leadTime ? req.body.leadTime : 0,
             isExpired: req.body.isExpired,
-            expiredDays: req.body.expiredDays ? req.body.expiredDays : 0,
-            isFactoryMade: req.body.isFactoryMade ? req.body.isFactoryMade : false
+            expiredDays: req.body.expiredDays ? req.body.expiredDays : 0
         }
         if (!productId || !data.productName || !data.minProductQty || !data.minProductUnit) {
             return res.status(400).send("Please Fill All The Fields");
@@ -1586,8 +1583,7 @@ const updateProduct = async (req, res) => {
                                                 minProductUnit = '${data.minProductUnit}',
                                                 leadTime = ${data.leadTime},
                                                 isExpired = ${data.isExpired},
-                                                expiredDays = ${data.isExpired ? `${data.expiredDays}` : 0},
-                                                isFactoryMade = ${data.isFactoryMade}
+                                                expiredDays = ${data.isExpired ? `${data.expiredDays}` : 0}
                                             WHERE productId = '${productId}'`;
         pool.query(sql_querry_updatedetails, (err, data) => {
             if (err) {
@@ -1635,7 +1631,7 @@ const getProductDetailsById = (req, res) => {
         if (!productId) {
             return res.status(404).send('ProductId Not Found');
         }
-        sql_queries_getdetails = `SELECT productId, productCategoryId, productName, minProductQty, minProductUnit, leadTime, isExpired, expiredDays, isFactoryMade FROM inventory_product_data WHERE productId = '${productId}';
+        sql_queries_getdetails = `SELECT productId, productCategoryId, productName, gujaratiProductName, minProductQty, minProductUnit, leadTime, isExpired, expiredDays FROM inventory_product_data WHERE productId = '${productId}';
                                   SELECT priorityNumber, bigUnitName, unitNumber, smallUnitName FROM product_unit_preference WHERE productId = '${productId}'`;
         pool.query(sql_queries_getdetails, (err, data) => {
             if (err) {

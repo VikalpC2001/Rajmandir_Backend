@@ -60,6 +60,45 @@ const getNewTokenByBranchId = (req, res) => {
     }
 }
 
+// Get New Token By Manu Facture Product Category
+
+const getNewTokenByMfProductCategoryId = (req, res) => {
+    try {
+        let token;
+        token = req.headers && req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const originalJwtToken = token;
+            const categoryId = req.body.categoryId;
+            const categoryName = req.body.categoryName;
+            const secretKey = process.env.JWT_SECRET;
+
+            if (!originalJwtToken || !categoryId || !secretKey) {
+                return res.status(404).send('Please Fill All The Fields....!')
+            }
+
+            // Decode the JWT token to get its payload
+            let decodedPayload = jwt.verify(originalJwtToken, secretKey);
+            decodedPayload = { ...decodedPayload, id: { ...decodedPayload.id, categoryId: categoryId } }
+
+            console.log('sss', decodedPayload);
+
+            // Modify the decoded payload and get the new JWT token
+            const modifiedJwtToken = modifyDecodedJwt(decodedPayload, secretKey);
+
+            if (modifiedJwtToken) {
+                return res.status(200).send({ ...decodedPayload.id, categoryName: categoryName, token: modifiedJwtToken });
+            } else {
+                return res.status(200).send('Failed to modify JWT token.');
+            }
+        } else {
+            res.status(401).send("Please Login Firest.....!");
+        }
+    } catch (error) {
+        console.error('Error decoding JWT:', error.message);
+        return res.status(500).send('Error decoding JWT');
+    }
+}
+
 // Get User API
 
 const getUserDetails = async (req, res) => {
@@ -496,5 +535,6 @@ module.exports = {
     updateUserDetailsByOwner,
     fillUserDetails,
     getNewTokenByBranchId,
-    updateUserDetailsBranchOwner
+    updateUserDetailsBranchOwner,
+    getNewTokenByMfProductCategoryId
 }

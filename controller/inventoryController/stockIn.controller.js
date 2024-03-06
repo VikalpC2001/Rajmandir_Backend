@@ -369,7 +369,7 @@ const updateStockInTransaction = async (req, res) => {
                 stockInComment: req.body.stockInComment ? req.body.stockInComment.trim() : null,
                 stockInDate: new Date(req.body.stockInDate ? req.body.stockInDate : null).toString().slice(4, 15)
             }
-            if (!data.productId || !data.productQty || !data.productUnit || !data.productPrice || !data.totalPrice || !data.supplierId || !data.stockInPaymentMethod || !data.stockInDate) {
+            if (!data.productId || !data.productQty || !data.productUnit || !data.totalPrice || !data.supplierId || !data.stockInPaymentMethod || !data.stockInDate) {
                 return res.status(400).send("Please Fill all the feilds");
             }
             const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM product_unit_preference WHERE productId = '${data.productId}' ORDER BY product_unit_preference.priorityNumber ASC;

@@ -10,6 +10,8 @@ const port = process.env.PORT || 8009;
 const userrouter = require('./routs/userRouts/user.routs');
 const inventoryrouter = require('./routs/inventoryRouts/inventory.routs');
 const branchrouter = require('./routs/branchRouts/branch.routs');
+const rawMaterialrouter = require('./routs/factoryRouts/rawMaterial.routs');
+const mfProductrouter = require('./routs/factoryRouts/mfProduct.routs');
 
 // app.use(cors({
 //   credentials: true,
@@ -35,6 +37,9 @@ app.use(bodyparser.json())
 app.use('/userrouter', userrouter);
 app.use('/inventoryrouter', inventoryrouter);
 app.use('/branchrouter', branchrouter);
+app.use('/rawMaterialrouter', rawMaterialrouter);
+app.use('/mfProductrouter', mfProductrouter);
+
 
 app.use(notFound);
 app.use(erroHandler);

@@ -1,4 +1,4 @@
-const pool = require('../../database');
+const pool = require('../../../database');
 
 function computeConversionFactors(unitsData) {
     const conversionFactors = {};
@@ -52,7 +52,7 @@ function convertQuantity(quantity, unitsDatas) {
 }
 
 function conversation(qty, id, unit, callback) {
-    const sql_query_getJson = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM product_unit_preference WHERE productId = '${id}' ORDER BY priorityNumber ASC`;
+    const sql_query_getJson = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM mfProduct_unit_preference WHERE mfProductId = '${id}' ORDER BY priorityNumber ASC`;
 
     pool.query(sql_query_getJson, (err, data) => {
         if (err) {
@@ -98,10 +98,27 @@ function conversationAsync(qty, id, baseUnit) {
 }
 
 async function processDatas(datas) {
+    console.log('madar', datas);
     const updatedDatas = [];
     for (const e of datas) {
         try {
-            const newJson = await conversationAsync(e.remainingStock, e.productId, e.minProductUnit);
+            const newJson = await conversationAsync(e.remainingStock, e.mfProductId, e.minMfProductUnit);
+            console.log('Jo Lodi', newJson);
+            updatedDatas.push(newJson);
+        } catch (error) {
+            // Handle errors here
+            console.error(error);
+        }
+    }
+    return updatedDatas;
+}
+
+async function MfprocessDatas(datas) {
+    console.log('madar', datas);
+    const updatedDatas = [];
+    for (const e of datas) {
+        try {
+            const newJson = await conversationAsync(e.remainingStock, e.mfProductId, e.minMfProductUnit);
             console.log('Jo Lodi', newJson);
             updatedDatas.push(newJson);
         } catch (error) {
@@ -128,6 +145,7 @@ function newConversationAsync(qty, id, baseUnit) {
 
 module.exports = {
     processDatas,
+    MfprocessDatas,
     newConversationAsync,
     computeConversionFactors
 }

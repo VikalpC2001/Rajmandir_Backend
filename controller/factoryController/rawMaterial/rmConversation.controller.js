@@ -1,4 +1,4 @@
-const pool = require('../../database');
+const pool = require('../../../database');
 
 function computeConversionFactors(unitsData) {
     const conversionFactors = {};
@@ -52,7 +52,7 @@ function convertQuantity(quantity, unitsDatas) {
 }
 
 function conversation(qty, id, unit, callback) {
-    const sql_query_getJson = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM product_unit_preference WHERE productId = '${id}' ORDER BY priorityNumber ASC`;
+    const sql_query_getJson = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM factory_rmUnit_preference WHERE rawMaterialId = '${id}' ORDER BY priorityNumber ASC`;
 
     pool.query(sql_query_getJson, (err, data) => {
         if (err) {
@@ -91,6 +91,7 @@ function conversationAsync(qty, id, baseUnit) {
                 console.error(err);
                 reject(err);
             } else {
+                console.log(baseUnit, 'base Unit')
                 resolve(newJson);
             }
         });
@@ -101,7 +102,7 @@ async function processDatas(datas) {
     const updatedDatas = [];
     for (const e of datas) {
         try {
-            const newJson = await conversationAsync(e.remainingStock, e.productId, e.minProductUnit);
+            const newJson = await conversationAsync(e.remainingStock, e.rawMaterialId, e.minRawMaterialUnit);
             console.log('Jo Lodi', newJson);
             updatedDatas.push(newJson);
         } catch (error) {

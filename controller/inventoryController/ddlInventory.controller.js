@@ -113,7 +113,6 @@ const ddlStockInCategory = (req, res) => {
     }
 }
 
-
 // StockOut Category Dropdown API
 
 const ddlStockOutCategory = (req, res) => {
