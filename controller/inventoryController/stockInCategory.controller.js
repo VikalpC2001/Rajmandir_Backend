@@ -1,62 +1,109 @@
 const pool = require('../../database');
 const { jsPDF } = require('jspdf');
 require('jspdf-autotable');
+const jwt = require("jsonwebtoken");
 
 // Get Category List
 
 const getStockInCategoryList = async (req, res) => {
     try {
-        const page = req.query.page;
-        const numPerPage = req.query.numPerPage;
-        const skip = (page - 1) * numPerPage;
-        const limit = skip + ',' + numPerPage;
-        const startDate = (req.query.startDate ? req.query.startDate : '').slice(4, 15);
-        const endDate = (req.query.endDate ? req.query.endDate : '').slice(4, 15);
-        sql_querry_getdetails = `SELECT count(*) as numRows FROM inventory_stockInCategory_data`;
-        pool.query(sql_querry_getdetails, (err, rows, fields) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            } else {
-                const numRows = rows[0].numRows;
-                const numPages = Math.ceil(numRows / numPerPage);
-                if (req.query.startDate && req.query.endDate) {
-                    sql_queries_getCategoryTable = `SELECT
-                                                        iscd.stockInCategoryId,
-                                                        iscd.stockInCategoryName
-                                                    FROM
-                                                        inventory_stockInCategory_data AS iscd
-                                                    LIMIT ${limit}`;
-                } else {
-                    sql_queries_getCategoryTable = `SELECT
-                                                        iscd.stockInCategoryId,
-                                                        iscd.stockInCategoryName
-                                                    FROM
-                                                        inventory_stockInCategory_data AS iscd
-                                                    LIMIT ${limit}`;
-                }
-                pool.query(sql_queries_getCategoryTable, (err, rows, fields) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const userId = decoded.id.id;
+            const branchId = decoded.id.branchId ? decoded.id.branchId : null;
+            if (branchId) {
+                const page = req.query.page;
+                const numPerPage = req.query.numPerPage;
+                const skip = (page - 1) * numPerPage;
+                const limit = skip + ',' + numPerPage;
+                var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+                var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+                var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+                const startDate = (req.query.startDate ? req.query.startDate : '').slice(4, 15);
+                const endDate = (req.query.endDate ? req.query.endDate : '').slice(4, 15);
+                sql_querry_getdetails = `SELECT count(*) as numRows FROM inventory_stockInCategory_data`;
+                pool.query(sql_querry_getdetails, (err, rows, fields) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
-                        return res.status(500).send('Database Error');;
+                        return res.status(500).send('Database Error');
                     } else {
-                        console.log(rows);
-                        console.log(numRows);
-                        console.log("Total Page :-", numPages);
-                        if (numRows === 0) {
-                            const rows = [{
-                                'msg': 'No Data Found'
-                            }]
-                            return res.status(200).send({ rows, numRows });
+                        const numRows = rows[0].numRows;
+                        const numPages = Math.ceil(numRows / numPerPage);
+                        if (req.query.startDate && req.query.endDate) {
+                            sql_queries_getCategoryTable = `SELECT
+                                                        iscd.stockInCategoryId,
+                                                        iscd.stockInCategoryName,
+                                                        ROUND((
+                                                        SELECT
+                                                            COALESCE(SUM(isd.totalPrice),
+                                                            0)
+                                                        FROM
+                                                            inventory_stockIn_data AS isd
+                                                        WHERE
+                                                            isd.productId IN(
+                                                            SELECT
+                                                                COALESCE(ip.productId, NULL)
+                                                            FROM
+                                                                inventory_product_data AS ip
+                                                            WHERE
+                                                                ip.productCategoryId = iscd.stockInCategoryId
+                                                        ) AND isd.branchId = '${branchId}' AND isd.stockInDate BETWEEN STR_TO_DATE('${startDate}','%b %d %Y') AND STR_TO_DATE('${endDate}','%b %d %Y'))
+                                                    ) AS totalPurchase
+                                                    FROM
+                                                        inventory_stockInCategory_data AS iscd
+                                                    LIMIT ${limit}`;
                         } else {
-                            return res.status(200).send({ rows, numRows, totalCategorystockInPrice: rows[0].totalCategorystockInPrice });
+                            sql_queries_getCategoryTable = `SELECT
+                                                        iscd.stockInCategoryId,
+                                                        iscd.stockInCategoryName,
+                                                        ROUND((
+                                                        SELECT
+                                                            COALESCE(SUM(isd.totalPrice),
+                                                            0)
+                                                        FROM
+                                                            inventory_stockIn_data AS isd
+                                                        WHERE
+                                                            isd.productId IN(
+                                                            SELECT
+                                                                COALESCE(ip.productId, NULL)
+                                                            FROM
+                                                                inventory_product_data AS ip
+                                                            WHERE
+                                                                ip.productCategoryId = iscd.stockInCategoryId
+                                                        ) AND isd.branchId = '${branchId}' AND isd.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y'))
+                                                    ) AS totalPurchase
+                                                    FROM
+                                                        inventory_stockInCategory_data AS iscd
+                                                    LIMIT ${limit}`;
                         }
+                        pool.query(sql_queries_getCategoryTable, (err, rows, fields) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');;
+                            } else {
+                                console.log(rows);
+                                console.log(numRows);
+                                console.log("Total Page :-", numPages);
+                                if (numRows === 0) {
+                                    const rows = [{
+                                        'msg': 'No Data Found'
+                                    }]
+                                    return res.status(200).send({ rows, numRows });
+                                } else {
+                                    return res.status(200).send({ rows, numRows });
+                                }
+                            }
+                        });
                     }
-                });
+                })
+            } else {
+                return res.status(404).send("Branch Id Not Found..!")
             }
-        })
-
-
+        } else {
+            return res.status(401).send("Please Login Firest.....!");
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).json('Internal Server Error');
@@ -107,27 +154,38 @@ const addstockInCategory = async (req, res) => {
 // Remove stockInCategory API
 
 const removestockInCategory = async (req, res) => {
-
     try {
-        const stockInCategoryId = req.query.stockInCategoryId.trim();
-        req.query.stockInCategoryId = pool.query(`SELECT stockInCategoryId FROM inventory_stockInCategory_data WHERE stockInCategoryId = '${stockInCategoryId}'`, (err, row) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM inventory_stockInCategory_data WHERE stockInCategoryId = '${stockInCategoryId}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                const stockInCategoryId = req.query.stockInCategoryId.trim();
+                req.query.stockInCategoryId = pool.query(`SELECT stockInCategoryId FROM inventory_stockInCategory_data WHERE stockInCategoryId = '${stockInCategoryId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send("Category Deleted Successfully");
+                    if (row && row.length) {
+                        const sql_querry_removedetails = `DELETE FROM inventory_stockInCategory_data WHERE stockInCategoryId = '${stockInCategoryId}'`;
+                        pool.query(sql_querry_removedetails, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');
+                            }
+                            return res.status(200).send("Category Deleted Successfully");
+                        })
+                    } else {
+                        return res.send('CategoryId Not Found');
+                    }
                 })
             } else {
-                return res.send('CategoryId Not Found');
+                return res.status(400).send('You are Not Authorised');
             }
-        })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');

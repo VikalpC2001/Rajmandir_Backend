@@ -1,4 +1,5 @@
 const pool = require('../../../database');
+const jwt = require("jsonwebtoken");
 
 // Get Manufacture Product Category List
 
@@ -29,34 +30,46 @@ const getMfProductCategoryList = async (req, res) => {
 
 const addMfProductCategory = async (req, res) => {
     try {
-        const uid1 = new Date();
-        const mfProductCategoryId = String("mfCategory_" + uid1.getTime());
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                const uid1 = new Date();
+                const mfProductCategoryId = String("mfCategory_" + uid1.getTime());
 
-        const data = {
-            mfProductCategoryName: req.body.mfProductCategoryName.trim(),
-        }
-        if (!data.mfProductCategoryName) {
-            return res.status(400).send("Please Add Category");
-        } else {
-            req.body.productName = pool.query(`SELECT mfProductCategoryName FROM factory_mfProductCategory_data WHERE mfProductCategoryName = '${data.mfProductCategoryName}'`, function (err, row) {
-                if (err) {
-                    console.error("An error occurd in SQL Queery", err);
-                    return res.status(500).send('Database Error');
+                const data = {
+                    mfProductCategoryName: req.body.mfProductCategoryName.trim(),
                 }
-                if (row && row.length) {
-                    return res.status(400).send('Category is Already In Use');
+                if (!data.mfProductCategoryName) {
+                    return res.status(400).send("Please Add Category");
                 } else {
-                    const sql_querry_addCategory = `INSERT INTO factory_mfProductCategory_data (mfProductCategoryId, mfProductCategoryName)  
-                                                    VALUES ('${mfProductCategoryId}','${data.mfProductCategoryName}')`;
-                    pool.query(sql_querry_addCategory, (err, data) => {
+                    req.body.productName = pool.query(`SELECT mfProductCategoryName FROM factory_mfProductCategory_data WHERE mfProductCategoryName = '${data.mfProductCategoryName}'`, function (err, row) {
                         if (err) {
                             console.error("An error occurd in SQL Queery", err);
                             return res.status(500).send('Database Error');
                         }
-                        return res.status(200).send("Category Added Successfully");
+                        if (row && row.length) {
+                            return res.status(400).send('Category is Already In Use');
+                        } else {
+                            const sql_querry_addCategory = `INSERT INTO factory_mfProductCategory_data (mfProductCategoryId, mfProductCategoryName)  
+                                                    VALUES ('${mfProductCategoryId}','${data.mfProductCategoryName}')`;
+                            pool.query(sql_querry_addCategory, (err, data) => {
+                                if (err) {
+                                    console.error("An error occurd in SQL Queery", err);
+                                    return res.status(500).send('Database Error');
+                                }
+                                return res.status(200).send("Category Added Successfully");
+                            })
+                        }
                     })
                 }
-            })
+            } else {
+                return res.status(400).send('You are Not Authorised');
+            }
+        } else {
+            return res.status(404).send('Please Login First...!');
         }
     } catch (error) {
         console.error('An error occurd', error);
@@ -68,25 +81,37 @@ const addMfProductCategory = async (req, res) => {
 
 const removeMfProductCategory = async (req, res) => {
     try {
-        const mfProductCategoryId = req.query.mfProductCategoryId.trim();
-        req.query.mfProductCategoryId = pool.query(`SELECT mfProductCategoryId FROM factory_mfProductCategory_data WHERE mfProductCategoryId = '${mfProductCategoryId}'`, (err, row) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM factory_mfProductCategory_data WHERE mfProductCategoryId = '${mfProductCategoryId}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                const mfProductCategoryId = req.query.mfProductCategoryId.trim();
+                req.query.mfProductCategoryId = pool.query(`SELECT mfProductCategoryId FROM factory_mfProductCategory_data WHERE mfProductCategoryId = '${mfProductCategoryId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send("Category Deleted Successfully");
+                    if (row && row.length) {
+                        const sql_querry_removedetails = `DELETE FROM factory_mfProductCategory_data WHERE mfProductCategoryId = '${mfProductCategoryId}'`;
+                        pool.query(sql_querry_removedetails, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');
+                            }
+                            return res.status(200).send("Category Deleted Successfully");
+                        })
+                    } else {
+                        return res.send('CategoryId Not Found');
+                    }
                 })
             } else {
-                return res.send('CategoryId Not Found');
+                return res.status(400).send('You are Not Authorised');
             }
-        })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');

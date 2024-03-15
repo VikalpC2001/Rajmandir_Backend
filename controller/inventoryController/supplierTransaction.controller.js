@@ -343,7 +343,7 @@ const addSupplierTransactionDetails = async (req, res) => {
     try {
 
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userId = decoded.id.id;
@@ -472,7 +472,7 @@ const updateSupplierTransactionDetails = async (req, res) => {
     try {
 
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userId = decoded.id.id;

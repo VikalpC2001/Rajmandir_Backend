@@ -116,12 +116,9 @@ const ddlMfProduct = (req, res) => {
                     const datas = Object.values(JSON.parse(JSON.stringify(result)));
                     processDatas(datas)
                         .then((data) => {
-                            console.log('json 1', datas);
-                            console.log('json 2', data);
                             const newData = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity, allConversation: data[index].vikJson } : { ...element, remainingStock: element.remainingStock + ' ' + element.productUnit, allConversation: data[index].vikJson },
                                 // console.log(data[index] && data[index].convertedQuantity)
                             ) : []
-                            console.log('new Json', newData);
                             return res.status(200).send(newData);
                         }).catch(error => {
                             console.error('Error in processing datas:', error);

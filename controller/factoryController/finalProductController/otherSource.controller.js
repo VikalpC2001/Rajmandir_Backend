@@ -1,4 +1,5 @@
 const pool = require('../../../database');
+const jwt = require("jsonwebtoken");
 
 // Get Other Source List
 
@@ -103,25 +104,37 @@ const addOtherSourceData = (req, res) => {
 
 const removeOtherSourceData = (req, res) => {
     try {
-        const otherSourceId = req.query.otherSourceId.trim();
-        req.query.mfProductCategoryId = pool.query(`SELECT otherSourceId FROM factory_otherSource_data WHERE otherSourceId = '${otherSourceId}'`, (err, row) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM factory_otherSource_data WHERE otherSourceId = '${otherSourceId}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                const otherSourceId = req.query.otherSourceId.trim();
+                req.query.mfProductCategoryId = pool.query(`SELECT otherSourceId FROM factory_otherSource_data WHERE otherSourceId = '${otherSourceId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send("Source Deleted Successfully");
+                    if (row && row.length) {
+                        const sql_querry_removedetails = `DELETE FROM factory_otherSource_data WHERE otherSourceId = '${otherSourceId}'`;
+                        pool.query(sql_querry_removedetails, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');
+                            }
+                            return res.status(200).send("Source Deleted Successfully");
+                        })
+                    } else {
+                        return res.send('SourceId Not Found');
+                    }
                 })
             } else {
-                return res.send('SourceId Not Found');
+                return res.status(400).send('You are Not Authorised');
             }
-        })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');

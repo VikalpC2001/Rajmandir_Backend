@@ -289,8 +289,6 @@ const getOwnerAllProductDetailsBySupplierId = async (req, res) => {
                             const datas = Object.values(JSON.parse(JSON.stringify(rows)));
                             processDatas(datas)
                                 .then((data) => {
-                                    console.log('json 1', datas);
-                                    console.log('json 2', data);
                                     const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
                                         // console.log(data[index] && data[index].convertedQuantity)
                                     ) : []
@@ -537,8 +535,6 @@ const exportExcelSheetForOwnerAllProductBySupplierId = (req, res) => {
         const datas = Object.values(JSON.parse(JSON.stringify(rows)));
         await processDatas(datas)
             .then(async (data) => {
-                console.log('json 1', datas);
-                console.log('json 2', data);
                 const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
                 ) : []
                 const workbook = new excelJS.Workbook();  // Create a new workbook

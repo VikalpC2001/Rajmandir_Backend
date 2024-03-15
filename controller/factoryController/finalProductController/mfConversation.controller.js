@@ -60,11 +60,9 @@ function conversation(qty, id, unit, callback) {
             return callback('Database Error', null);
         }
         let unitJson = Object.values(JSON.parse(JSON.stringify(data)));
-        console.log('jo to', unitJson);
         if (unitJson.length != 0) {
             let conversationFactor = computeConversionFactors(unitJson);
             let transformedArray = conversationFactor.map(item => {
-                console.log('errir>>', (Number(qty / item.value).toFixed(4)), parseInt(Number(qty / item.value)), (Number(qty / item.value).toFixed(4)) % parseInt(Number(qty / item.value)), (Number(qty / item.value).toFixed(4)), parseInt(Number(qty / item.value)))
                 return { unitName: item.unitName, value: parseInt(Number(qty / item.value)) == 0 && Number(qty / item.value) > 0 ? (Number(qty / item.value).toFixed(4)) : (Number(qty / item.value).toFixed(4)) % parseInt(Number(qty / item.value)) > 0 ? (Number(qty / item.value).toFixed(4)) : parseInt(Number(qty / item.value)) };
             });
             let convertedQuantity = convertQuantity(qty, unitJson);
@@ -98,12 +96,10 @@ function conversationAsync(qty, id, baseUnit) {
 }
 
 async function processDatas(datas) {
-    console.log('madar', datas);
     const updatedDatas = [];
     for (const e of datas) {
         try {
             const newJson = await conversationAsync(e.remainingStock, e.mfProductId, e.minMfProductUnit);
-            console.log('Jo Lodi', newJson);
             updatedDatas.push(newJson);
         } catch (error) {
             // Handle errors here
@@ -114,12 +110,10 @@ async function processDatas(datas) {
 }
 
 async function MfprocessDatas(datas) {
-    console.log('madar', datas);
     const updatedDatas = [];
     for (const e of datas) {
         try {
             const newJson = await conversationAsync(e.remainingStock, e.mfProductId, e.minMfProductUnit);
-            console.log('Jo Lodi', newJson);
             updatedDatas.push(newJson);
         } catch (error) {
             // Handle errors here

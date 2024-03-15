@@ -170,8 +170,6 @@ const getProductDetailsBySupplierId = async (req, res) => {
                     const datas = Object.values(JSON.parse(JSON.stringify(data)));
                     processDatas(datas)
                         .then((data) => {
-                            console.log('json 1', datas);
-                            console.log('json 2', data);
                             const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
                                 // console.log(data[index] && data[index].convertedQuantity)
                             ) : []
@@ -332,8 +330,6 @@ const getAllProductDetailsBySupplierId = async (req, res) => {
                                     const datas = Object.values(JSON.parse(JSON.stringify(rows)));
                                     processDatas(datas)
                                         .then((data) => {
-                                            console.log('json 1', datas);
-                                            console.log('json 2', data);
                                             const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
                                                 // console.log(data[index] && data[index].convertedQuantity)
                                             ) : []
@@ -575,27 +571,43 @@ const addSupplierDetails = async (req, res) => {
 // Remove Supplier API
 
 const removeSupplierDetails = async (req, res) => {
-
     try {
-        const supplierId = req.query.supplierId
-        req.query.userId = pool.query(`SELECT supplierId FROM inventory_supplier_data WHERE supplierId = '${supplierId}'`, (err, row) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM inventory_supplier_data WHERE supplierId = '${supplierId}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
-                    if (err) {
-                        console.error("An error occurd in SQL Queery", err);
-                        return res.status(500).send('Database Error');
-                    }
-                    return res.status(200).send("supplierId Deleted Successfully");
-                })
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const factoryId = process.env.RAJ_MANDIR_FACTORY_ID
+            const userRights = decoded.id.rights;
+            if (userRights == 1) {
+                const supplierId = req.query.supplierId
+                if (supplierId == factoryId) {
+                    return res.status(400).send("You Can Not Delete Rajmandir Factory");
+                } else {
+                    req.query.userId = pool.query(`SELECT supplierId FROM inventory_supplier_data WHERE supplierId = '${supplierId}'`, (err, row) => {
+                        if (err) {
+                            console.error("An error occurd in SQL Queery", err);
+                            return res.status(500).send('Database Error');
+                        }
+                        if (row && row.length) {
+                            const sql_querry_removedetails = `DELETE FROM inventory_supplier_data WHERE supplierId = '${supplierId}'`;
+                            pool.query(sql_querry_removedetails, (err, data) => {
+                                if (err) {
+                                    console.error("An error occurd in SQL Queery", err);
+                                    return res.status(500).send('Database Error');
+                                }
+                                return res.status(200).send("supplierId Deleted Successfully");
+                            })
+                        } else {
+                            return res.send('supplierId Not Found');
+                        }
+                    })
+                }
             } else {
-                return res.send('supplierId Not Found');
+                return res.status(400).send("You Are Not Authorised...!");
             }
-        })
+        } else {
+            res.status(401).send("Please Login Firest.....!");
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');
@@ -807,8 +819,6 @@ const exportExcelSheetForAllProductBySupplierId = (req, res) => {
                 const datas = Object.values(JSON.parse(JSON.stringify(rows)));
                 await processDatas(datas)
                     .then(async (data) => {
-                        console.log('json 1', datas);
-                        console.log('json 2', data);
                         const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
                         ) : []
                         const workbook = new excelJS.Workbook();  // Create a new workbook

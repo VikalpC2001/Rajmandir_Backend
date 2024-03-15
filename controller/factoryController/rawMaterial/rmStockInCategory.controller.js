@@ -1,4 +1,5 @@
 const pool = require('../../../database');
+const jwt = require("jsonwebtoken");
 
 // Get Category List
 
@@ -8,6 +9,9 @@ const getRmStockInCategoryList = async (req, res) => {
         const numPerPage = req.query.numPerPage;
         const skip = (page - 1) * numPerPage;
         const limit = skip + ',' + numPerPage;
+        var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+        var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+        var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
         const startDate = (req.query.startDate ? req.query.startDate : '').slice(4, 15);
         const endDate = (req.query.endDate ? req.query.endDate : '').slice(4, 15);
         sql_querry_getdetails = `SELECT count(*) as numRows FROM factory_rmStockInCategory_data`;
@@ -21,16 +25,52 @@ const getRmStockInCategoryList = async (req, res) => {
                 if (req.query.startDate && req.query.endDate) {
                     sql_queries_getCategoryTable = `SELECT
                                                         fscd.stockInCategoryId,
-                                                        fscd.stockInCategoryName
+                                                        fscd.stockInCategoryName,
+                                                        ROUND(
+                                                            (
+                                                            SELECT
+                                                                COALESCE(SUM(frsi.totalPrice),0)
+                                                            FROM
+                                                                factory_rmStockIn_data AS frsi
+                                                            WHERE
+                                                                frsi.rawMaterialId IN(
+                                                                SELECT
+                                                                    COALESCE(frd.rawMaterialId, NULL)
+                                                                FROM
+                                                                    factory_rawMaterial_data AS frd
+                                                                WHERE
+                                                                    frd.rawMaterialCategoryId = fscd.stockInCategoryId
+                                                            ) AND frsi.rmStockInDate BETWEEN STR_TO_DATE('${startDate}','%b %d %Y') AND STR_TO_DATE('${endDate}','%b %d %Y')
+                                                        )
+                                                        ) AS totalRawMaterialPurchase
                                                     FROM
                                                         factory_rmStockInCategory_data AS fscd
+                                                    ORDER BY fscd.stockInCategoryName
                                                     LIMIT ${limit}`;
                 } else {
                     sql_queries_getCategoryTable = `SELECT
                                                         fscd.stockInCategoryId,
-                                                        fscd.stockInCategoryName
+                                                        fscd.stockInCategoryName,
+                                                        ROUND(
+                                                            (
+                                                            SELECT
+                                                                COALESCE(SUM(frsi.totalPrice),0)
+                                                            FROM
+                                                                factory_rmStockIn_data AS frsi
+                                                            WHERE
+                                                                frsi.rawMaterialId IN(
+                                                                SELECT
+                                                                    COALESCE(frd.rawMaterialId, NULL)
+                                                                FROM
+                                                                    factory_rawMaterial_data AS frd
+                                                                WHERE
+                                                                    frd.rawMaterialCategoryId = fscd.stockInCategoryId
+                                                            ) AND frsi.rmStockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                        )
+                                                        ) AS totalRawMaterialPurchase
                                                     FROM
                                                         factory_rmStockInCategory_data AS fscd
+                                                    ORDER BY fscd.stockInCategoryName
                                                     LIMIT ${limit}`;
                 }
                 pool.query(sql_queries_getCategoryTable, (err, rows, fields) => {
@@ -47,7 +87,7 @@ const getRmStockInCategoryList = async (req, res) => {
                             }]
                             return res.status(200).send({ rows, numRows });
                         } else {
-                            return res.status(200).send({ rows, numRows, totalCategorystockInPrice: rows[0].totalCategorystockInPrice });
+                            return res.status(200).send({ rows, numRows });
                         }
                     }
                 });
@@ -63,7 +103,6 @@ const getRmStockInCategoryList = async (req, res) => {
 
 const addRmStockInCategory = async (req, res) => {
     try {
-
         const uid1 = new Date();
         const stockInCategoryId = String("stockInCategory_" + uid1.getTime());
         console.log("...", stockInCategoryId);
@@ -103,27 +142,38 @@ const addRmStockInCategory = async (req, res) => {
 // Remove stockInCategory API
 
 const removeRmStockInCategory = async (req, res) => {
-
     try {
-        const stockInCategoryId = req.query.stockInCategoryId.trim();
-        req.query.stockInCategoryId = pool.query(`SELECT stockInCategoryId FROM factory_rmStockInCategory_data WHERE stockInCategoryId = '${stockInCategoryId}'`, (err, row) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM factory_rmStockInCategory_data WHERE stockInCategoryId = '${stockInCategoryId}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                const stockInCategoryId = req.query.stockInCategoryId.trim();
+                req.query.stockInCategoryId = pool.query(`SELECT stockInCategoryId FROM factory_rmStockInCategory_data WHERE stockInCategoryId = '${stockInCategoryId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send("Category Deleted Successfully");
+                    if (row && row.length) {
+                        const sql_querry_removedetails = `DELETE FROM factory_rmStockInCategory_data WHERE stockInCategoryId = '${stockInCategoryId}'`;
+                        pool.query(sql_querry_removedetails, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');
+                            }
+                            return res.status(200).send("Category Deleted Successfully");
+                        })
+                    } else {
+                        return res.send('CategoryId Not Found');
+                    }
                 })
             } else {
-                return res.send('CategoryId Not Found');
+                return res.status(400).send('You are Not Authorised');
             }
-        })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');

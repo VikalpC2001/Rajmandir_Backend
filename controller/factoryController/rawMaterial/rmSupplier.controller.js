@@ -161,8 +161,6 @@ const getRawMaterialsBySupplierId = async (req, res) => {
                 const datas = Object.values(JSON.parse(JSON.stringify(data)));
                 processDatas(datas)
                     .then((data) => {
-                        console.log('json 1', datas);
-                        console.log('json 2', data);
                         const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minRawMaterialUnit },
                             // console.log(data[index] && data[index].convertedQuantity)
                         ) : []
@@ -235,8 +233,8 @@ const getAllRawMaterialsBySupplierId = async (req, res) => {
                                                   SELECT
                                                       rawMaterialId,
                                                       rmStockInDate,
-                                                      rawMaterialQty,
-                                                      rawMaterialPrice
+                                                      CONCAT(rmStockInDisplayQty,' ',rmStockInDisplayUnit) AS rawMaterialQty,
+                                                      totalPrice AS rawMaterialPrice
                                                   FROM
                                                       factory_rmStockIn_data
                                                   WHERE
@@ -318,8 +316,6 @@ const getAllRawMaterialsBySupplierId = async (req, res) => {
                                 const datas = Object.values(JSON.parse(JSON.stringify(rows)));
                                 processDatas(datas)
                                     .then((data) => {
-                                        console.log('json 1', datas);
-                                        console.log('json 2', data);
                                         const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minRawMaterialUnit },
                                             // console.log(data[index] && data[index].convertedQuantity)
                                         ) : []
@@ -551,25 +547,37 @@ const addFactorySupplierDetails = async (req, res) => {
 
 const removeFactorySupplierDetails = async (req, res) => {
     try {
-        const rmSupplierId = req.query.rmSupplierId
-        req.query.userId = pool.query(`SELECT rmSupplierId FROM factory_supplier_data WHERE rmSupplierId = '${rmSupplierId}'`, (err, row) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM factory_supplier_data WHERE rmSupplierId = '${rmSupplierId}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                const rmSupplierId = req.query.rmSupplierId
+                req.query.userId = pool.query(`SELECT rmSupplierId FROM factory_supplier_data WHERE rmSupplierId = '${rmSupplierId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send("rmSupplierId Deleted Successfully");
+                    if (row && row.length) {
+                        const sql_querry_removedetails = `DELETE FROM factory_supplier_data WHERE rmSupplierId = '${rmSupplierId}'`;
+                        pool.query(sql_querry_removedetails, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');
+                            }
+                            return res.status(200).send("rmSupplierId Deleted Successfully");
+                        })
+                    } else {
+                        return res.send('rmSupplierId Not Found');
+                    }
                 })
             } else {
-                return res.send('rmSupplierId Not Found');
+                return res.status(400).send('You are Not Authorised');
             }
-        })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');
@@ -778,8 +786,6 @@ const exportExcelSheetForAllRawMaterialsBySupplierId = (req, res) => {
             const datas = Object.values(JSON.parse(JSON.stringify(rows)));
             await processDatas(datas)
                 .then(async (data) => {
-                    console.log('json 1', datas);
-                    console.log('json 2', data);
                     const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minRawMaterialUnit },
                     ) : []
                     const workbook = new excelJS.Workbook();  // Create a new workbook

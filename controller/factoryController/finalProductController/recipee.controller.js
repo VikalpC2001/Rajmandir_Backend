@@ -1,5 +1,6 @@
 const { json } = require('express');
 const pool = require('../../../database');
+const jwt = require('jsonwebtoken');
 
 // Function For Convert Units
 
@@ -185,7 +186,6 @@ function asd(id) {
                 console.error(err);
                 reject(err);
             } else {
-                console.log('???', newJson)
                 resolve(newJson);
             }
         });
@@ -231,7 +231,6 @@ function asdf(id) {
                 console.error(err);
                 reject(err);
             } else {
-                console.log('???', newJson)
                 resolve(newJson);
             }
         });
@@ -294,6 +293,8 @@ const addRecipeeData = (req, res) => {
         // }
 
         const mfProductId = recipeeData && recipeeData.mfProductId && recipeeData.mfProductId.length ? recipeeData.mfProductId : null;
+        const batchQty = recipeeData && recipeeData.batchQty && recipeeData.batchQty.length ? recipeeData.batchQty : 0;
+        const batchUnit = recipeeData && recipeeData.batchUnit && recipeeData.batchUnit.length ? recipeeData.batchUnit : null;
         const recipeMaterial = recipeeData && recipeeData.recipeMaterial && recipeeData.recipeMaterial.length != 0 ? recipeeData.recipeMaterial : [];
         const otherExpense = recipeeData && recipeeData.otherExpense && recipeeData.otherExpense.length != 0 ? recipeeData.otherExpense : [];
         const produceProduct = recipeeData && recipeeData.produceProduct && recipeeData.produceProduct.length != 0 ? recipeeData.produceProduct : [];
@@ -380,7 +381,15 @@ const addRecipeeData = (req, res) => {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');;
                     }
-                    return res.status(200).send('Recipee Add Successfully');
+                    let sql_query_addBatchWiseBottel = `INSERT INTO factory_batchWiseBottel_data(mfProductId, batchQty, batchUnit)
+                                                        VALUES('${mfProductId}', ${batchQty}, '${batchUnit}')`;
+                    pool.query(sql_query_addBatchWiseBottel, (err, data) => {
+                        if (err) {
+                            console.error("An error occurd in SQL Queery", err);
+                            return res.status(500).send('Database Error');;
+                        }
+                        return res.status(200).send('Recipee Add Successfully');
+                    })
                 })
             }
         })
@@ -394,33 +403,45 @@ const addRecipeeData = (req, res) => {
 
 const removeRecipeeData = (req, res) => {
     try {
-        const mfProductId = req.query.mfProductId;
-        const sql_query_chkRecipee = `SELECT mfProductId FROM factory_rawMaterialRecipee_data WHERE mfProductId = '${mfProductId}';
-                                      SELECT mfProductId FROM factory_otherSourceRecipee_data WHERE mfProductId = '${mfProductId}';
-                                      SELECT mfProductId FROM factory_mfProductRecipee_data WHERE mfProductId = '${mfProductId}'`;
-
-        pool.query(sql_query_chkRecipee, (err, chk) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            const chkId = chk.flat();
-            console.log(chkId && chkId.length);
-            if (chkId && chkId.length) {
-                const sql_qurey_removeRecipee = `DELETE FROM factory_rawMaterialRecipee_data WHERE mfProductId = '${mfProductId}';
-                                                 DELETE FROM factory_otherSourceRecipee_data WHERE mfProductId = '${mfProductId}';
-                                                 DELETE FROM factory_mfProductRecipee_data WHERE mfProductId = '${mfProductId}'`;
-                pool.query(sql_qurey_removeRecipee, (err, data) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                const mfProductId = req.query.mfProductId;
+                const sql_query_chkRecipee = `SELECT mfProductId FROM factory_rawMaterialRecipee_data WHERE mfProductId = '${mfProductId}';
+                                              SELECT mfProductId FROM factory_otherSourceRecipee_data WHERE mfProductId = '${mfProductId}';
+                                              SELECT mfProductId FROM factory_mfProductRecipee_data WHERE mfProductId = '${mfProductId}'`;
+                pool.query(sql_query_chkRecipee, (err, chk) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send('Recipee Deleted Successfully');
+                    const chkId = chk.flat();
+                    console.log(chkId && chkId.length);
+                    if (chkId && chkId.length) {
+                        const sql_qurey_removeRecipee = `DELETE FROM factory_rawMaterialRecipee_data WHERE mfProductId = '${mfProductId}';
+                                                         DELETE FROM factory_otherSourceRecipee_data WHERE mfProductId = '${mfProductId}';
+                                                         DELETE FROM factory_mfProductRecipee_data WHERE mfProductId = '${mfProductId}';
+                                                         DELETE FROM factory_batchWiseBottel_data WHERE mfProductId = '${mfProductId}'`;
+                        pool.query(sql_qurey_removeRecipee, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');
+                            }
+                            return res.status(200).send('Recipee Deleted Successfully');
+                        })
+                    } else {
+                        return res.status(404).send('Recipee Not Found');
+                    }
                 })
             } else {
-                return res.status(404).send('Recipee Not Found');
+                return res.status(400).send('You are Not Authorised');
             }
-        })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');
@@ -434,6 +455,8 @@ const updateRecipeeData = (req, res) => {
         const recipeeData = req.body;
 
         const mfProductId = recipeeData && recipeeData.mfProductId && recipeeData.mfProductId.length ? recipeeData.mfProductId : null;
+        const batchQty = recipeeData && recipeeData.batchQty ? recipeeData.batchQty : 0;
+        const batchUnit = recipeeData && recipeeData.batchUnit && recipeeData.batchUnit.length ? recipeeData.batchUnit : null;
         const recipeMaterial = recipeeData && recipeeData.recipeMaterial && recipeeData.recipeMaterial.length != 0 ? recipeeData.recipeMaterial : [];
         const otherExpense = recipeeData && recipeeData.otherExpense && recipeeData.otherExpense.length != 0 ? recipeeData.otherExpense : [];
         const produceProduct = recipeeData && recipeeData.produceProduct && recipeeData.produceProduct.length != 0 ? recipeeData.produceProduct : [];
@@ -529,7 +552,19 @@ const updateRecipeeData = (req, res) => {
                             console.error("An error occurd in SQL Queery", err);
                             return res.status(500).send('Database Error');;
                         }
-                        return res.status(200).send('Recipee Updated Successfully');
+                        let sql_query_addBatchWiseBottel = `UPDATE
+                                                                factory_batchWiseBottel_data
+                                                            SET
+                                                                batchQty = ${batchQty},
+                                                                batchUnit = '${batchUnit}'
+                                                            WHERE mfProductId = '${mfProductId}'`;
+                        pool.query(sql_query_addBatchWiseBottel, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');;
+                            }
+                            return res.status(200).send('Recipee Updated Successfully');
+                        })
                     })
                 })
             } else {
@@ -544,15 +579,17 @@ const updateRecipeeData = (req, res) => {
 
 // Fill Recipee wise Data
 
-const fillRecipeeDataById = (req, res) => {
+const fillRecipeeDataByQty = (req, res) => {
     try {
         const mfProductId = req.query.mfProductId;
         const qty = req.query.qty ? req.query.qty : 0;
         const unit = req.query.unit;
-        console.log(unit, 'ffffff');
+        const batchQty = req.query.batchQty ? req.query.batchQty : 0;
+        console.log(qty, unit, 'ffffff');
 
         const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM mfProduct_unit_preference mfProduct_unit_preference WHERE mfProductId = '${mfProductId}' ORDER BY mfProduct_unit_preference.priorityNumber ASC;
-                                         SELECT minMfProductUnit AS  minProductUnit FROM factory_manufactureProduct_data WHERE mfProductId = '${mfProductId}'`;
+                                         SELECT minMfProductUnit AS  minProductUnit FROM factory_manufactureProduct_data WHERE mfProductId = '${mfProductId}';
+                                         SELECT batchQty AS qtyBatch FROM factory_batchWiseBottel_data WHERE mfProductId = '${mfProductId}'`;
         pool.query(sql_queries_getNeedData, (err, result) => {
             if (err) {
                 console.error("An error occurd in SQL Queery", err);
@@ -560,17 +597,26 @@ const fillRecipeeDataById = (req, res) => {
             }
             const needData = {
                 unitsData: result && result[0] ? Object.values(JSON.parse(JSON.stringify(result[0]))) : null,
-                toUnit: result && result[0] && result[0].minProductUnit ? result[1][0].minProductUnit : null,
+                toUnit: result && result[0] ? result[1][0].minProductUnit : null,
+                qtyBatch: result && result[0] ? result[2][0].qtyBatch : 0,
             }
+            console.log(unit, needData.toUnit, 'ffffff');
             const productFinalQty = (needData.unitsData && needData.unitsData.length !== 0) ? convertUnits(needData.unitsData, qty, unit, needData.toUnit) : qty;
             console.log(productFinalQty, 'jarrrr')
             const sql_query_fillRecipeeData = `-- RAW MATERIAL RECIPEE DATA
                                                SELECT
                                                    frd.rawMaterialId,
                                                    frmd.rawMaterialName,
-                                                   ROUND((frd.rmValue * ${productFinalQty}),4) AS usedMaterial,
+                                                   CASE
+                                                   	WHEN frmd.isQtyNum = false THEN ROUND((frd.rmValue * ${batchQty}),4)
+                                               		WHEN frmd.isQtyNum = true THEN ROUND(frd.rmValue / ${needData.qtyBatch} * ${productFinalQty},4)
+                                               		ELSE ROUND((frd.rmValue * 2),4)
+                                               	END AS usedMaterial,
                                                    frd.rmUnit,
-                                                   (SELECT COALESCE(SUM(sd.remainingQty),0) FROM factory_rmStockIn_data AS sd WHERE sd.rawMaterialId = frd.rawMaterialId AND sd.remainingQty != 0) AS remainQty
+                                                   (
+                                                   	SELECT COALESCE(SUM(sd.remainingQty),0) FROM factory_rmStockIn_data AS sd
+                                                   	WHERE sd.rawMaterialId = frd.rawMaterialId AND sd.remainingQty != 0
+                                               	) AS remainQty
                                                FROM
                                                    factory_rawMaterialRecipee_data AS frd
                                                INNER JOIN factory_rawMaterial_data AS frmd ON frmd.rawMaterialId = frd.rawMaterialId
@@ -579,10 +625,10 @@ const fillRecipeeDataById = (req, res) => {
                                                SELECT
                                                    fosrd.otherSourceId,
                                                    fosd.otherSourceName,
-                                                   ROUND((fosrd.osValue * ${productFinalQty}),4) AS usedSource,
+                                                   ROUND((fosrd.osValue * ${batchQty}),4) AS usedSource,
                                                    fosrd.osUnit,
                                                    fosd.otherSourcePrice AS unitPrice,
-                                                   ((fosrd.osValue * ${productFinalQty}) * fosd.otherSourcePrice) AS usedPrice
+                                                   ((fosrd.osValue * ${batchQty}) * fosd.otherSourcePrice) AS usedPrice
                                                FROM
                                                    factory_otherSourceRecipee_data AS fosrd
                                                INNER JOIN factory_otherSource_data AS fosd ON fosd.otherSourceId = fosrd.otherSourceId
@@ -591,7 +637,7 @@ const fillRecipeeDataById = (req, res) => {
                                                SELECT
                                                    mfprd.produceProductId,
                                                    mfpd.mfProductName,
-                                                   ROUND((mfprd.ppValue * ${productFinalQty}),4) AS usedValue,
+                                                   ROUND((mfprd.ppValue * ${batchQty}),4) AS usedValue,
                                                    mfprd.ppUnit,
                                                    (SELECT COALESCE(SUM(sd.remainingQty),0) FROM factory_mfProductStockIn_data AS sd WHERE sd.mfProductId = mfprd.produceProductId AND sd.remainingQty != 0) AS remainQty
                                                FROM
@@ -607,15 +653,11 @@ const fillRecipeeDataById = (req, res) => {
                 const datas = recipee[0];
                 processDatas(datas)
                     .then(async (data) => {
-                        // console.log('json 1', datas);
-                        // console.log('json 2', data);
                         const newData = await datas ? datas.map((element, index) => ({ ...element, remainQty: data[index].xyz })
                         ) : []
                         const newDats = recipee[2];
                         processDatas1(newDats)
                             .then(async (mfdata) => {
-                                console.log('json 1', newDats);
-                                console.log('json 2', mfdata);
                                 const mfnewData = await newDats ? newDats.map((element, index) => ({ ...element, remainQty: mfdata[index].xyz })
                                 ) : []
                                 const recipeeJson = {
@@ -633,6 +675,88 @@ const fillRecipeeDataById = (req, res) => {
                         return //res.status(500).send('Internal Error');
                     });
             })
+        })
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
+// Fill Recipee By Batch
+
+const fillRecipeeDataByBatch = (req, res) => {
+    try {
+        const mfProductId = req.query.mfProductId;
+        const batchQty = req.query.batchQty ? req.query.batchQty : 0;
+
+        const sql_query_fillRecipeeData = `-- RAW MATERIAL RECIPEE DATA
+                                               SELECT
+                                                   frd.rawMaterialId,
+                                                   frmd.rawMaterialName,
+                                                   ROUND((frd.rmValue * ${batchQty}),4) AS usedMaterial,
+                                                   frd.rmUnit,
+                                                   (SELECT COALESCE(SUM(sd.remainingQty),0) FROM factory_rmStockIn_data AS sd WHERE sd.rawMaterialId = frd.rawMaterialId AND sd.remainingQty != 0) AS remainQty
+                                               FROM
+                                                   factory_rawMaterialRecipee_data AS frd
+                                               INNER JOIN factory_rawMaterial_data AS frmd ON frmd.rawMaterialId = frd.rawMaterialId
+                                               WHERE frd.mfProductId = '${mfProductId}';
+                                               -- OTHER SOURCE RECIPEE DATA
+                                               SELECT
+                                                   fosrd.otherSourceId,
+                                                   fosd.otherSourceName,
+                                                   ROUND((fosrd.osValue * ${batchQty}),4) AS usedSource,
+                                                   fosrd.osUnit,
+                                                   fosd.otherSourcePrice AS unitPrice,
+                                                   ((fosrd.osValue * ${batchQty}) * fosd.otherSourcePrice) AS usedPrice
+                                               FROM
+                                                   factory_otherSourceRecipee_data AS fosrd
+                                               INNER JOIN factory_otherSource_data AS fosd ON fosd.otherSourceId = fosrd.otherSourceId
+                                               WHERE fosrd.mfProductId = '${mfProductId}';
+                                               -- MANUFACTURE PRODUCT RECIPEE DATA
+                                               SELECT
+                                                   mfprd.produceProductId,
+                                                   mfpd.mfProductName,
+                                                   ROUND((mfprd.ppValue * ${batchQty}),4) AS usedValue,
+                                                   mfprd.ppUnit,
+                                                   (SELECT COALESCE(SUM(sd.remainingQty),0) FROM factory_mfProductStockIn_data AS sd WHERE sd.mfProductId = mfprd.produceProductId AND sd.remainingQty != 0) AS remainQty
+                                               FROM
+                                                   factory_mfProductRecipee_data AS mfprd
+                                               INNER JOIN factory_manufactureProduct_data AS mfpd ON mfpd.mfProductId = mfprd.produceProductId
+                                               WHERE mfprd.mfProductId = '${mfProductId}';
+                                               -- GET BATCH QTY BY ID
+                                               SELECT (batchQty * ${batchQty}) AS batchQty, batchUnit FROM factory_batchWiseBottel_data WHERE mfProductId = '${mfProductId}'`;
+        pool.query(sql_query_fillRecipeeData, (err, recipee) => {
+            if (err) {
+                console.error("An error occurd in SQL Queery", err);
+                return res.status(500).send('Database Error');
+            }
+
+            const datas = recipee[0];
+            processDatas(datas)
+                .then(async (data) => {
+                    const newData = await datas ? datas.map((element, index) => ({ ...element, remainQty: data[index].xyz })
+                    ) : []
+                    const newDats = recipee[2];
+                    processDatas1(newDats)
+                        .then(async (mfdata) => {
+                            const mfnewData = await newDats ? newDats.map((element, index) => ({ ...element, remainQty: mfdata[index].xyz })
+                            ) : []
+                            const recipeeJson = {
+                                recipeMaterial: newData,
+                                otherExpense: recipee[1],
+                                produceProductdata: mfnewData,
+                                batchQty: recipee && recipee[3][0] ? recipee[3][0].batchQty : 0,
+                                batchUnit: recipee && recipee[3][0] ? recipee[3][0].batchUnit : null
+                            }
+                            return res.status(200).send(recipeeJson);
+                        }).catch(error => {
+                            console.error('Error in processing datas:', error);
+                            return //res.status(500).send('Internal Error');
+                        });
+                }).catch(error => {
+                    console.error('Error in processing datas:', error);
+                    return //res.status(500).send('Internal Error');
+                });
         })
     } catch (error) {
         console.error('An error occurd', error);
@@ -674,7 +798,9 @@ const fillEditRecipeeDataById = (req, res) => {
                                                FROM
                                                    factory_mfProductRecipee_data AS mfprd
                                                INNER JOIN factory_manufactureProduct_data AS mfpd ON mfpd.mfProductId = mfprd.produceProductId
-                                               WHERE mfprd.mfProductId = '${mfProductId}'`;
+                                               WHERE mfprd.mfProductId = '${mfProductId}';
+                                               -- GET BATCH QTY BY ID
+                                               SELECT batchQty, batchUnit FROM factory_batchWiseBottel_data WHERE mfProductId = '${mfProductId}'`;
         pool.query(sql_query_fillRecipeeData, (err, recipee) => {
             if (err) {
                 console.error("An error occurd in SQL Queery", err);
@@ -685,9 +811,6 @@ const fillEditRecipeeDataById = (req, res) => {
             const mfProductData = Object.values(JSON.parse(JSON.stringify(recipee[2])));
             rmUnits(recipeMateria)
                 .then((rmdata) => {
-                    console.log('json 1', recipeMateria);
-                    // console.log('json 2', rmdata);
-
                     const rms = recipeMateria ? recipeMateria.map((element, index) => ({
                         ...element,
                         materialUnits: rmdata[index],
@@ -697,7 +820,6 @@ const fillEditRecipeeDataById = (req, res) => {
                         }
                     })
                     ) : []
-
                     const oms = otherSourceData ? otherSourceData.map((element, index) => ({
                         ...element,
                         expenseObject: {
@@ -724,9 +846,10 @@ const fillEditRecipeeDataById = (req, res) => {
                             const recipeeJson = {
                                 recipeMaterial: rms,
                                 otherExpense: oms,
-                                produceProductda: mfs
+                                produceProductda: mfs,
+                                batchQty: recipee && recipee[3][0] ? recipee[3][0].batchQty : 0,
+                                batchUnit: recipee && recipee[3][0] ? recipee[3][0].batchUnit : null
                             }
-
                             return res.status(200).send(recipeeJson);
                         }).catch(error => {
                             console.error('Error in processing datas:', error);
@@ -748,8 +871,9 @@ module.exports = {
     addRecipeeData,
     removeRecipeeData,
     updateRecipeeData,
-    fillRecipeeDataById,
+    fillRecipeeDataByQty,
     fillEditRecipeeDataById,
     processDatas,
-    processDatas1
+    processDatas1,
+    fillRecipeeDataByBatch
 }

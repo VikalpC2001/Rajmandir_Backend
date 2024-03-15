@@ -1,5 +1,8 @@
 const pool = require('../../../database');
 const jwt = require("jsonwebtoken");
+const excelJS = require("exceljs");
+const { jsPDF } = require('jspdf');
+require('jspdf-autotable');
 const {
     addRmStockOutDetailsAutoPromise,
     addOtherSourceDataPromise,
@@ -389,12 +392,13 @@ const addMfProductStockInData = async (req, res) => {
 
 const removeMfProductStockInData = (req, res) => {
     try {
-        const mfStockInID = req.query.mfStockInID
+        const mfStockInID = req.query.mfStockInId
         req.query.mfStockInID = pool.query(`SELECT mfStockInID, mfProductQty, remainingQty FROM factory_mfProductStockIn_data WHERE mfStockInID = '${mfStockInID}'`, (err, row) => {
             if (err) {
                 console.error("An error occurd in SQL Queery", err);
                 return res.status(500).send('Database Error');
             }
+            console.log()
             let isMfStockInID = row && row[0] ? row[0].mfStockInID : null;
             if (row && isMfStockInID) {
                 const qty = row[0].mfProductQty;
@@ -684,7 +688,8 @@ const fillMfProductStockInData = (req, res) => {
                                          rmd.rawMaterialName,
                                          rsod.rmStockOutDisplayQty AS usedMaterial,
                                          rsod.rmStockOutDisplayUnit AS rmUnit,
-                                         (SELECT COALESCE(SUM(sd.remainingQty),0) FROM factory_rmStockIn_data AS sd WHERE sd.rawMaterialId =  rsod.rawMaterialId AND sd.remainingQty != 0) AS remainQty
+                                         (SELECT COALESCE(SUM(sd.remainingQty),0) FROM factory_rmStockIn_data AS sd WHERE sd.rawMaterialId =  rsod.rawMaterialId AND sd.remainingQty != 0) AS remainQty,
+                                         rsod.rmStockOutPrice AS rmStockOutPrice
                                      FROM
                                          factory_rmStockOut_data AS rsod
                                      INNER JOIN factory_rawMaterial_data AS rmd ON rmd.rawMaterialId = rsod.rawMaterialId
@@ -713,7 +718,8 @@ const fillMfProductStockInData = (req, res) => {
                                          mfpd.mfProductName,
                                          mpso.mfStockOutDisplayQty AS usedValue,
                                          mpso.mfStockOutDisplayUnit AS ppUnit,
-                                         (SELECT COALESCE(SUM(sd.remainingQty),0) FROM factory_mfProductStockIn_data AS sd WHERE sd.mfProductId = mpso.mfProductId AND sd.remainingQty != 0) AS remainQty
+                                         (SELECT COALESCE(SUM(sd.remainingQty),0) FROM factory_mfProductStockIn_data AS sd WHERE sd.mfProductId = mpso.mfProductId AND sd.remainingQty != 0) AS remainQty,
+                                         mpso.mfProductOutPrice AS mfProductOutPrice
                                      FROM
                                          factory_mfProductStockOut_data AS mpso
                                      INNER JOIN factory_manufactureProduct_data AS mfpd ON mfpd.mfProductId = mpso.mfProductId
@@ -738,14 +744,10 @@ const fillMfProductStockInData = (req, res) => {
 
             processDatas(rmData)
                 .then(async (data) => {
-                    // console.log('json 1', datas);
-                    // console.log('json 2', data);
                     const newData = rmData ? rmData.map((element, index) => ({ ...element, remainQty: data[index].xyz })
                     ) : []
                     processDatas1(mfData)
                         .then(async (mfDatas) => {
-                            // console.log('json 1', newDats);
-                            // console.log('json 2', mfdata);
                             const mfnewData = mfData ? mfData.map((element, index) => ({ ...element, remainQty: mfDatas[index].xyz })
                             ) : []
                             const fillStockInJson = {
@@ -773,10 +775,302 @@ const fillMfProductStockInData = (req, res) => {
     }
 }
 
+// Export Excel for StockIn
+
+const exportExcelSheetForMfStockIn = (req, res) => {
+    let token;
+    token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+    if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const departmentId = decoded && decoded.id && decoded.id.categoryId ? decoded.id.categoryId : null;
+        if (departmentId) {
+            const data = {
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                mfProductId: req.query.mfProductId,
+            }
+            const commanQuarry = `SELECT
+                                    CONCAT(
+                                              user_details.userFirstName,
+                                              ' ',
+                                              user_details.userLastName
+                                          ) AS enterBy,
+                                          UPPER(factory_manufactureProduct_data.mfProductName) AS productName,
+                                          CONCAT(mfStockInDisplayQty,' ',mfStockInDisplayUnit) AS Qty,
+                                          ROUND(mfProductPrice,2) AS Price,
+                                          totalPrice AS totalPrice,
+                                          mfStockInComment AS comment,
+                                          DATE_FORMAT(mfStockInDate, '%d-%m-%Y') AS mfStockInDate,
+                                          DATE_FORMAT(mfStockInCreationDate, '%h:%i %p') AS mfStockInTime
+                                  FROM
+                                        factory_mfProductStockIn_data
+                                  INNER JOIN user_details ON user_details.userId = factory_mfProductStockIn_data.userId
+                                  INNER JOIN factory_manufactureProduct_data ON factory_manufactureProduct_data.mfProductId = factory_mfProductStockIn_data.mfProductId
+                                  WHERE factory_mfProductStockIn_data.mfProductId IN (SELECT COALESCE(fmp.mfProductId, null) FROM factory_manufactureProduct_data AS fmp WHERE fmp.mfProductCategoryId = '${departmentId}')`;
+            if (req.query.mfProductId && req.query.startDate && req.query.endDate) {
+                sql_queries_getdetails = `${commanQuarry}
+                                                  AND factory_mfProductStockIn_data.mfProductId = '${data.mfProductId}' AND factory_mfProductStockIn_data.mfStockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                  ORDER BY factory_mfProductStockIn_data.mfStockInDate DESC, factory_mfProductStockIn_data.mfStockInCreationDate DESC`;
+            } else if (req.query.startDate && req.query.endDate) {
+                sql_queries_getdetails = `${commanQuarry}
+                                                  AND factory_mfProductStockIn_data.mfStockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y') 
+                                                  ORDER BY factory_mfProductStockIn_data.mfStockInDate DESC, factory_mfProductStockIn_data.mfStockInCreationDate DESC`;
+            } else if (req.query.mfProductId) {
+                sql_queries_getdetails = `${commanQuarry}
+                                                  AND factory_mfProductStockIn_data.mfProductId = '${data.mfProductId}'
+                                                  ORDER BY factory_mfProductStockIn_data.mfStockInDate DESC, factory_mfProductStockIn_data.mfStockInCreationDate DESC`;
+            } else {
+                sql_queries_getdetails = `${commanQuarry}
+                                                  ORDER BY factory_mfProductStockIn_data.mfStockInDate DESC, factory_mfProductStockIn_data.mfStockInCreationDate DESC`;
+            }
+            pool.query(sql_queries_getdetails, async (err, rows) => {
+                if (err) return res.status(404).send(err);
+                const workbook = new excelJS.Workbook();  // Create a new workbook
+                const worksheet = workbook.addWorksheet("StockIn List"); // New Worksheet
+
+                if (req.query.startDate && req.query.endDate) {
+                    worksheet.mergeCells('A1', 'I1');
+                    worksheet.getCell('A1').value = `Stock In From ${data.startDate} To ${data.endDate}`;
+                } else {
+                    worksheet.mergeCells('A1', 'I1');
+                    worksheet.getCell('A1').value = `ALL Stock In`;
+                }
+
+                /*Column headers*/
+                worksheet.getRow(2).values = ['S no.', 'Entered By', 'Product', 'Quantity', 'Price', 'Total', 'Comment', 'Date', "Time"];
+
+                // Column for data in excel. key must match data key
+                worksheet.columns = [
+                    { key: "s_no", width: 10, },
+                    { key: "enterBy", width: 20 },
+                    { key: "productName", width: 30 },
+                    { key: "Qty", width: 20 },
+                    { key: "productPrice", width: 10 },
+                    { key: "totalPrice", width: 10 },
+                    { key: "comment", width: 30 },
+                    { key: "mfStockInDate", width: 20 },
+                    { key: "mfStockInTime", width: 20 },
+                ];
+                //Looping through User data
+                const arr = rows
+                let counter = 1;
+                arr.forEach((user, index) => {
+                    user.s_no = counter;
+                    const row = worksheet.addRow(user); // Add data in worksheet
+                    counter++;
+                });
+                // Making first line in excel bold
+                worksheet.getRow(1).eachCell((cell) => {
+                    cell.font = { bold: true, size: 13 }
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                    height = 200
+                });
+                worksheet.getRow(2).eachCell((cell) => {
+                    cell.font = { bold: true, size: 13 }
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                });
+                worksheet.getRow(1).height = 30;
+                worksheet.getRow(2).height = 20;
+                worksheet.getRow(arr.length + 3).values = ['Total:', '', '', '', '', { formula: `SUM(F3:F${arr.length + 2})` }];
+
+                worksheet.getRow(arr.length + 3).eachCell((cell) => {
+                    cell.font = { bold: true, size: 14 }
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                })
+                worksheet.eachRow((row) => {
+                    row.eachCell((cell) => {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        row.height = 20
+                    });
+                });
+                try {
+                    const data = await workbook.xlsx.writeBuffer()
+                    var fileName = new Date().toString().slice(4, 15) + ".xlsx";
+                    console.log(">>>", fileName);
+                    // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                    // res.addHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename="+ fileName)
+                    res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    res.type = 'blob';
+                    res.send(data)
+                    // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                    // res.setHeader("Content-Disposition", "attachment; filename=" + "Report.xlsx");
+                    // workbook.xlsx.write(res)
+                    // .then((data)=>{
+                    //     res.end();
+                    //         console.log('File write done........');
+                    //     });
+                } catch (err) {
+                    throw new Error(err);
+                }
+            })
+        } else {
+            return res.status(401).send("Department Not Found");
+        }
+    } else {
+        return res.status(401).send("Please Login Firest.....!");
+    }
+};
+
+// Export PDF Function
+
+async function createPDF(res, datas, sumFooterArray, tableHeading) {
+    try {
+        // Create a new PDF document
+        console.log(';;;;;;', datas);
+        console.log('?????', sumFooterArray);
+        console.log('?????', tableHeading);
+        const doc = new jsPDF();
+
+        // JSON data
+        const jsonData = datas;
+        // console.log(jsonData);
+
+        // Get the keys from the first JSON object to set as columns
+        const keys = Object.keys(jsonData[0]);
+
+        // Define columns for the auto table, including a "Serial No." column
+        const columns = [
+            { header: 'Sr.', dataKey: 'serialNo' }, // Add Serial No. column
+            ...keys.map(key => ({ header: key, dataKey: key }))
+        ]
+
+        // Convert JSON data to an array of arrays (table rows) and add a serial number
+        const data = jsonData.map((item, index) => [index + 1, ...keys.map(key => item[key]), '', '']);
+
+        // Initialize the sum columns with empty strings
+        if (sumFooterArray) {
+            data.push(sumFooterArray);
+        }
+
+        // Add auto table to the PDF document
+        doc.text(15, 15, tableHeading);
+        doc.autoTable({
+            startY: 20,
+            head: [columns.map(col => col.header)], // Extract headers correctly
+            body: data,
+            theme: 'grid',
+            styles: {
+                cellPadding: 2, // Add padding to cells for better appearance
+                halign: 'center', // Horizontally center-align content
+                fontSize: 10
+            },
+        });
+
+        const pdfBytes = await doc.output();
+        const fileName = 'jane-doe.pdf'; // Set the desired file name
+
+        // Set the response headers for the PDF download
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Type', 'application/pdf');
+
+        // Stream the PDF to the client for download
+        res.send(pdfBytes);
+
+
+        // Save the PDF to a file
+        // const pdfFilename = 'output.pdf';
+        // fs.writeFileSync(pdfFilename, doc.output());
+        // console.log(`PDF saved as ${pdfFilename}`);
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Export PDF For StockIn
+
+const exportPdfForMfStockIn = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const departmentId = decoded && decoded.id && decoded.id.categoryId ? decoded.id.categoryId : null;
+            if (departmentId) {
+                const data = {
+                    startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                    endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                    mfProductId: req.query.mfProductId,
+                }
+                const commanQuarry = `SELECT
+                                          CONCAT(
+                                              user_details.userFirstName,
+                                              ' ',
+                                              user_details.userLastName
+                                          ) AS "Enter By",
+                                          UPPER(factory_manufactureProduct_data.mfProductName) AS "Product Name",
+                                          CONCAT(mfStockInDisplayQty,' ',mfStockInDisplayUnit) AS "Quantity",
+                                          ROUND(mfProductPrice,2) AS "Price",
+                                          totalPrice AS "Total Price",
+                                          mfStockInComment AS "Comment",
+                                          DATE_FORMAT(mfStockInDate, '%d-%m-%Y') AS "Date",
+                                          DATE_FORMAT(mfStockInCreationDate, '%h:%i %p') AS "Time"
+                                      FROM
+                                          factory_mfProductStockIn_data
+                                      INNER JOIN user_details ON user_details.userId = factory_mfProductStockIn_data.userId
+                                      INNER JOIN factory_manufactureProduct_data ON factory_manufactureProduct_data.mfProductId = factory_mfProductStockIn_data.mfProductId
+                                      WHERE factory_mfProductStockIn_data.mfProductId IN (SELECT COALESCE(fmp.mfProductId, null) FROM factory_manufactureProduct_data AS fmp WHERE fmp.mfProductCategoryId = '${departmentId}')`;
+                if (req.query.mfProductId && req.query.startDate && req.query.endDate) {
+                    sql_queries_getdetails = `${commanQuarry}
+                                                  AND factory_mfProductStockIn_data.mfProductId = '${data.mfProductId}' AND factory_mfProductStockIn_data.mfStockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                  ORDER BY factory_mfProductStockIn_data.mfStockInDate DESC, factory_mfProductStockIn_data.mfStockInCreationDate DESC`;
+                } else if (req.query.startDate && req.query.endDate) {
+                    sql_queries_getdetails = `${commanQuarry}
+                                                  AND factory_mfProductStockIn_data.mfStockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y') 
+                                                  ORDER BY factory_mfProductStockIn_data.mfStockInDate DESC, factory_mfProductStockIn_data.mfStockInCreationDate DESC`;
+                } else if (req.query.mfProductId) {
+                    sql_queries_getdetails = `${commanQuarry}
+                                                  AND factory_mfProductStockIn_data.mfProductId = '${data.mfProductId}'
+                                                  ORDER BY factory_mfProductStockIn_data.mfStockInDate DESC, factory_mfProductStockIn_data.mfStockInCreationDate DESC`;
+                } else {
+                    sql_queries_getdetails = `${commanQuarry}
+                                                  ORDER BY factory_mfProductStockIn_data.mfStockInDate DESC, factory_mfProductStockIn_data.mfStockInCreationDate DESC`;
+                }
+                pool.query(sql_queries_getdetails, (err, rows) => {
+                    if (err) {
+                        console.error("An error occurd in SQL Queery", err);
+                        return res.status(500).send('Database Error');
+                    } else if (rows && rows.length <= 0) {
+                        return res.status(400).send('No Data Found');
+                    }
+                    const abc = Object.values(JSON.parse(JSON.stringify(rows)));
+                    const sumOfTotalPrice = abc.reduce((total, item) => total + (item['Total Price'] || 0), 0);;
+                    const sumFooterArray = ['Total', '', '', '', parseFloat(sumOfTotalPrice).toLocaleString('en-IN')];
+                    if (req.query.startMonth && req.query.endMonth) {
+                        tableHeading = `StockIn Data From ${data.startDate} To ${data.endDate}`;
+                    } else {
+                        tableHeading = `All StockIn Data`;
+                    }
+
+                    createPDF(res, abc, sumFooterArray, tableHeading)
+                        .then(() => {
+                            console.log('PDF created successfully');
+                            res.status(200);
+                        })
+                        .catch((err) => {
+                            console.log(err);
+                            res.status(500).send('Error creating PDF');
+                        });
+                });
+            } else {
+                return res.status(401).send("Department Not Found");
+            }
+        } else {
+            return res.status(401).send("Please Login Firest.....!");
+        }
+
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
 module.exports = {
     addMfProductStockInData,
     removeMfProductStockInData,
     updateMfProductStockInData,
     getmfProductStockInList,
-    fillMfProductStockInData
+    fillMfProductStockInData,
+    exportExcelSheetForMfStockIn,
+    exportPdfForMfStockIn
 }

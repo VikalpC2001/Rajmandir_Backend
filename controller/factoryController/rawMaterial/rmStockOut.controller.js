@@ -151,7 +151,7 @@ const addRmStockOutDetails = async (req, res) => {
     try {
 
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userId = decoded.id.id;
@@ -450,7 +450,7 @@ const removeRmStockOutTransaction = async (req, res) => {
             const isStockInId = chk && chk[0] && chk[0].stockInId ? chk[0].stockInId : null;
             if (isStockInId) {
                 if (chk[0].productQty != chk[0].remainingQty) {
-                    return res.status(400).send('You Can not Delete Transaction Because Its Used');
+                    return res.status(400).send('You Can not Delete Transaction Because It is Used');
                 } else {
                     req.query.rmStockOutId = pool.query(`SELECT rmStockOutId, rawMaterialQty FROM factory_rmStockOut_data WHERE rmStockOutId = '${rmStockOutId}'`, (err, row) => {
                         if (err) {
@@ -696,8 +696,6 @@ const removeRmStockOutTransaction = async (req, res) => {
 
                                 return query;
                             }
-
-                            console.log(generateUpdateQuery(sopq))
                             const sql_qurey_updatedRemainQty = generateUpdateQuery(sopq);
                             pool.query(sql_qurey_updatedRemainQty, (err, data) => {
                                 if (err) {
@@ -763,7 +761,10 @@ const fillRmStockOutTransaction = (req, res) => {
                                                                         GROUP BY
                                                                             factory_rmStockOut_data.rawMaterialId
                                                                     ) AS so ON p.rawMaterialId = so.rawMaterialId
-                                                                WHERE p.rawMaterialId = '${rawMaterialId}'`;
+                                                                WHERE p.rawMaterialId = '${rawMaterialId}';
+                                            SELECT isd.branchId AS branchId, bd.branchName AS branchName FROM inventory_stockIn_data AS isd
+                                            INNER JOIN branch_data AS bd ON bd.branchId = isd.branchId
+                                            WHERE stockInId = '${rmStockOutId}'`;
             pool.query(sql_get_remainStockWithdata, (err, data) => {
                 if (err) {
                     console.error("An error occurd in SQL Queery", err);
@@ -774,6 +775,8 @@ const fillRmStockOutTransaction = (req, res) => {
                 const fillData = {
                     ...stockOutData,
                     remainingStock: remainStock,
+                    branchId: data && data[2].length ? data[2][0].branchId : null,
+                    branchName: data && data[2].length ? data[2][0].branchName : null
                 }
                 return res.status(200).send(fillData);
             })
@@ -789,7 +792,7 @@ const fillRmStockOutTransaction = (req, res) => {
 const updateRmStockOutTransaction = async (req, res) => {
     try {
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userId = decoded.id.id;
@@ -805,9 +808,11 @@ const updateRmStockOutTransaction = async (req, res) => {
             const rmStockOutDate = new Date(req.body.rmStockOutDate ? req.body.rmStockOutDate : "10/10/1001").toString().slice(4, 15);
             const isSupplyBranch = req.body.isSupplyBranch ? req.body.isSupplyBranch : false;
             const branchId = req.body.branchId ? req.body.branchId : '';
+            const oldBrachName = req.body.oldBranchName ? req.body.oldBranchName : '';
             const billNumber = req.body.billNumber ? req.body.billNumber : '';
             const reason = req.body.reason ? req.body.reason : null;
             const currentModifyDate = new Date().toString().slice(4, 24)
+            console.log('old', oldBrachName);
             if (!rawMaterialId || !rawMaterialQty || !rawMaterialUnit || !rmStockOutCategory || !rmStockOutDate || !reason) {
                 return res.status(400).send("Please Fill all the feilds");
             }
@@ -821,10 +826,10 @@ const updateRmStockOutTransaction = async (req, res) => {
                 const isStockInId = chk && chk[0] && chk[0].stockInId ? chk[0].stockInId : null;
                 if (isStockInId) {
                     if (chk[0].productQty != chk[0].remainingQty) {
-                        return res.status(400).send('You Can not Delete Transaction Because Its Used');
+                        return res.status(400).send('You Can not Edit Transaction Because It is Used');
                     } else {
-                        const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM product_unit_preference WHERE productId = '${data.productId}' ORDER BY product_unit_preference.priorityNumber ASC;
-                                                         SELECT ipd.minProductUnit AS  minProductUnit, ipd.isExpired AS isExpired, ipd.expiredDays AS expiredDays FROM inventory_product_data AS ipd WHERE ipd.productId = '${data.productId}'`;
+                        const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM product_unit_preference WHERE productId = '${rawMaterialId}' ORDER BY product_unit_preference.priorityNumber ASC;
+                                                         SELECT ipd.minProductUnit AS  minProductUnit, ipd.isExpired AS isExpired, ipd.expiredDays AS expiredDays FROM inventory_product_data AS ipd WHERE ipd.productId = '${rawMaterialId}'`;
                         pool.query(sql_queries_getNeedData, (err, result) => {
                             if (err) {
                                 console.error("An error occurd in SQL Queery", err);
@@ -836,31 +841,25 @@ const updateRmStockOutTransaction = async (req, res) => {
                                 isExpired: result && result[1][0] && result[1][0].isExpired ? result[1][0].isExpired : 0,
                                 expiredDays: result && result[1][0] && result[1][0].expiredDays ? result[1][0].expiredDays : 0
                             }
-                            console.log(needData.unitsData);
 
                             const StockInProductFinalQty = (stockInneedData.unitsData && stockInneedData.unitsData.length !== 0) ? convertUnits(stockInneedData.unitsData, rawMaterialQty, rawMaterialUnit, stockInneedData.toUnit) : rawMaterialQty;
 
-                            pool.query(sql_querry_updatedetails, (err, data) => {
+                            const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM factory_rmUnit_preference WHERE rawMaterialId = '${rawMaterialId}' ORDER BY factory_rmUnit_preference.priorityNumber ASC;
+                                                             SELECT ipd.minRawMaterialUnit AS  minRawMaterialUnit, ipd.isExpired AS isExpired, ipd.expiredDays AS expiredDays FROM factory_rawMaterial_data AS ipd WHERE ipd.rawMaterialId = '${rawMaterialId}'`;
+                            pool.query(sql_queries_getNeedData, (err, result) => {
                                 if (err) {
                                     console.error("An error occurd in SQL Queery", err);
                                     return res.status(500).send('Database Error');
                                 }
-                                const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM factory_rmUnit_preference WHERE rawMaterialId = '${rawMaterialId}' ORDER BY factory_rmUnit_preference.priorityNumber ASC;
-                                                                 SELECT ipd.minRawMaterialUnit AS  minRawMaterialUnit, ipd.isExpired AS isExpired, ipd.expiredDays AS expiredDays FROM factory_rawMaterial_data AS ipd WHERE ipd.rawMaterialId = '${rawMaterialId}'`;
-                                pool.query(sql_queries_getNeedData, (err, result) => {
-                                    if (err) {
-                                        console.error("An error occurd in SQL Queery", err);
-                                        return res.status(500).send('Database Error');
-                                    }
-                                    const needData = {
-                                        unitsData: result && result[0] ? Object.values(JSON.parse(JSON.stringify(result[0]))) : null,
-                                        toUnit: result && result[1][0] && result[1][0].minRawMaterialUnit ? result[1][0].minRawMaterialUnit : null,
-                                        isExpired: result && result[1][0] && result[1][0].isExpired ? result[1][0].isExpired : 0,
-                                        expiredDays: result && result[1][0] && result[1][0].expiredDays ? result[1][0].expiredDays : 0
-                                    }
-                                    console.log(needData.unitsData);
-                                    const productFinalQty = (needData.unitsData && needData.unitsData.length !== 0) ? convertUnits(needData.unitsData, rawMaterialQty, rawMaterialUnit, needData.toUnit) : rawMaterialQty;
-                                    get_remaining_stock = `SELECT COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS remainingStock FROM factory_rawMaterial_data AS p
+                                const needData = {
+                                    unitsData: result && result[0] ? Object.values(JSON.parse(JSON.stringify(result[0]))) : null,
+                                    toUnit: result && result[1][0] && result[1][0].minRawMaterialUnit ? result[1][0].minRawMaterialUnit : null,
+                                    isExpired: result && result[1][0] && result[1][0].isExpired ? result[1][0].isExpired : 0,
+                                    expiredDays: result && result[1][0] && result[1][0].expiredDays ? result[1][0].expiredDays : 0
+                                }
+                                console.log(needData.unitsData);
+                                const productFinalQty = (needData.unitsData && needData.unitsData.length !== 0) ? convertUnits(needData.unitsData, rawMaterialQty, rawMaterialUnit, needData.toUnit) : rawMaterialQty;
+                                get_remaining_stock = `SELECT COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS remainingStock FROM factory_rawMaterial_data AS p
                                              LEFT JOIN
                                             (
                                                 SELECT
@@ -883,247 +882,472 @@ const updateRmStockOutTransaction = async (req, res) => {
                                             ) AS so ON p.rawMaterialId = so.rawMaterialId
                                         WHERE p.rawMaterialId = '${rawMaterialId}';
                                     SELECT rawMaterialQty FROM factory_rmStockOut_data WHERE rmStockOutId = '${rmStockOutId}'`;
-                                    pool.query(get_remaining_stock, (err, remaindata) => {
-                                        if (err) {
-                                            console.error("An error occurd in SQL Queery", err);
-                                            return res.status(500).send('Database Error');
-                                        }
-                                        const remainStock = remaindata[0][0].remainingStock;
-                                        const previousQty = remaindata[1][0].rawMaterialQty;
-                                        console.log("./././", remainStock + previousQty);
-                                        const remainIngUpdateStock = remainStock + previousQty;
-                                        if (remainIngUpdateStock < productFinalQty) {
-                                            return res.status(400).send(`You Can Not Stock Out more Then Remain Stock...!`);
-                                        } else {
-                                            const get_previous_data = `SELECT factory_rmStockOut_data.rawMaterialId, rawMaterialQty, rmStockOutDisplayQty, rmStockOutDisplayUnit, rmStockOutPrice, factory_rmStockOutCategory_data.stockOutCategoryName AS rmStockOutCategory, rmStockOutComment, DATE_FORMAT(rmStockOutDate,'%b %d %Y') AS rmStockOutDate, rmStockOutModificationDate FROM factory_rmStockOut_data
-                                                    INNER JOIN factory_rmStockOutCategory_data ON factory_rmStockOutCategory_data.stockOutCategoryId = factory_rmStockOut_data.rmStockOutCategory
-                                                    WHERE rmStockOutId = '${rmStockOutId}';
-                                                    SELECT factory_rmStockOutCategory_data.stockOutCategoryName FROM factory_rmStockOutCategory_data
-                                                    WHERE stockOutCategoryId = '${rmStockOutCategory}'`;
-                                            pool.query(get_previous_data, (err, data) => {
+                                pool.query(get_remaining_stock, (err, remaindata) => {
+                                    if (err) {
+                                        console.error("An error occurd in SQL Queery", err);
+                                        return res.status(500).send('Database Error');
+                                    }
+                                    const remainStock = remaindata[0][0].remainingStock;
+                                    const previousQty = remaindata[1][0].rawMaterialQty;
+                                    console.log("./././", remainStock + previousQty);
+                                    const remainIngUpdateStock = remainStock + previousQty;
+                                    if (remainIngUpdateStock < productFinalQty) {
+                                        return res.status(400).send(`You Can Not Stock Out more Then Remain Stock...!`);
+                                    } else {
+                                        const get_previous_data = `SELECT factory_rmStockOut_data.rawMaterialId, rawMaterialQty, rmStockOutDisplayQty, rmStockOutDisplayUnit, rmStockOutPrice, factory_rmStockOutCategory_data.stockOutCategoryName AS rmStockOutCategory, rmStockOutComment, DATE_FORMAT(rmStockOutDate,'%b %d %Y') AS rmStockOutDate, rmStockOutModificationDate FROM factory_rmStockOut_data
+                                                                    INNER JOIN factory_rmStockOutCategory_data ON factory_rmStockOutCategory_data.stockOutCategoryId = factory_rmStockOut_data.rmStockOutCategory
+                                                                    WHERE rmStockOutId = '${rmStockOutId}';
+                                                                    SELECT factory_rmStockOutCategory_data.stockOutCategoryName FROM factory_rmStockOutCategory_data
+                                                                    WHERE stockOutCategoryId = '${rmStockOutCategory}';
+                                                                    SELECT branchName FROM branch_data WHERE branchId = '${branchId}'`;
+                                        pool.query(get_previous_data, (err, data) => {
+                                            if (err) {
+                                                console.error("An error occurd in SQL Queery", err);
+                                                return res.status(500).send('Database Error');
+                                            }
+                                            const previousStockOutPrice = data[0][0].rmStockOutPrice;
+                                            const prevoiusQuantity = data[0][0].rawMaterialQty;
+                                            const rmStockOutModificationDate = data[0][0].rmStockOutModificationDate ? new Date(data[0][0].rmStockOutModificationDate).toString().slice(4, 24) : new Date().toString().slice(4, 24);
+                                            const previousData = {
+                                                rawMaterialQty: data[0][0].rmStockOutDisplayQty + ' ' + data[0][0].rmStockOutDisplayUnit,
+                                                rmStockOutCategory: data[0][0].rmStockOutCategory,
+                                                rmStockOutComment: data[0][0].rmStockOutComment ? data[0][0].rmStockOutComment : null,
+                                                rmStockOutDate: data[0][0].rmStockOutDate,
+                                                branchName: oldBrachName ? oldBrachName : ''
+                                            }
+                                            const newData = {
+                                                rawMaterialQty: req.body.rawMaterialQty + ' ' + req.body.rawMaterialUnit,
+                                                rmStockOutCategory: data[1][0].stockOutCategoryName,
+                                                rmStockOutComment: req.body.rmStockOutComment,
+                                                rmStockOutDate: new Date(req.body.rmStockOutDate).toString().slice(4, 15),
+                                                branchName: data[2][0].branchName ? data[2][0].branchName : ''
+                                            }
+                                            let dataEdited = {}
+                                            console.log(">>>", previousData);
+                                            console.log('/////???', Object.keys(previousData));
+                                            console.log(">>>.....", newData);
+                                            const previousKey = Object.keys(previousData);
+                                            const updatedField = previousKey.filter((key) => {
+                                                if (previousData[key] != newData[key]) {
+                                                    dataEdited = { ...dataEdited, [key]: newData[key] }
+                                                    return key;
+                                                }
+                                            })
+                                            // if (updatedField.includes('rawMaterialQty')) {
+                                            //     previousData.rawMaterialQty = previousData.rawMaterialQty + ' ' + previousData.rawMaterialUnit;
+                                            //     newData.rawMaterialQty = newData.rawMaterialQty + ' ' + rawMaterialUnit;
+                                            //     console.log('chavda', newData);
+                                            // }
+                                            // else if (updatedField.includes('rawMaterialUnit')) {
+                                            //     previousData.rawMaterialUnit = previousData.rawMaterialQty + ' ' + previousData.rawMaterialUnit;
+                                            //     newData.rawMaterialUnit = newData.rawMaterialQty + ' ' + rawMaterialUnit;
+                                            //     console.log('chavda else', newData);
+                                            // }
+                                            // console.log('parmar out', newData);
+                                            if (updatedField == null || updatedField == '') {
+                                                return res.status(500).send('No Change');
+                                            }
+
+                                            sql_querry_getStockIndetail = `SELECT rmStockInId, rawMaterialId, rawMaterialQty, rawMaterialPrice AS stockInPrice, remainingQty AS stockInQuantity FROM factory_rmStockIn_data WHERE factory_rmStockIn_data.rawMaterialId = '${rawMaterialId}' AND factory_rmStockIn_data.remainingQty != 0 ORDER BY rmStockInDate ASC;
+                                                                           SELECT rmStockInId FROM factory_stockOutwiseStockInId_data WHERE rmStockOutId = '${rmStockOutId}'`;
+                                            pool.query(sql_querry_getStockIndetail, (err, data) => {
                                                 if (err) {
                                                     console.error("An error occurd in SQL Queery", err);
                                                     return res.status(500).send('Database Error');
                                                 }
-                                                const previousStockOutPrice = data[0][0].rmStockOutPrice;
-                                                const prevoiusQuantity = data[0][0].rawMaterialQty;
-                                                const rmStockOutModificationDate = data[0][0].rmStockOutModificationDate ? new Date(data[0][0].rmStockOutModificationDate).toString().slice(4, 24) : new Date().toString().slice(4, 24);
-                                                const previousData = {
-                                                    rawMaterialQty: data[0][0].rmStockOutDisplayQty + ' ' + data[0][0].rmStockOutDisplayUnit,
-                                                    rmStockOutCategory: data[0][0].rmStockOutCategory,
-                                                    rmStockOutComment: data[0][0].rmStockOutComment ? data[0][0].rmStockOutComment : null,
-                                                    rmStockOutDate: data[0][0].rmStockOutDate,
-                                                }
-                                                const newData = {
-                                                    rawMaterialQty: req.body.rawMaterialQty + ' ' + req.body.rawMaterialUnit,
-                                                    rmStockOutCategory: data[1][0].stockOutCategoryName,
-                                                    rmStockOutComment: req.body.rmStockOutComment,
-                                                    rmStockOutDate: new Date(req.body.rmStockOutDate).toString().slice(4, 15)
-                                                }
-                                                let dataEdited = {}
-                                                console.log(">>>", previousData);
-                                                console.log('/////???', Object.keys(previousData));
-                                                console.log(">>>.....", newData);
-                                                const previousKey = Object.keys(previousData);
-                                                const updatedField = previousKey.filter((key) => {
-                                                    if (previousData[key] != newData[key]) {
-                                                        dataEdited = { ...dataEdited, [key]: newData[key] }
-                                                        return key;
-                                                    }
-                                                })
-                                                // if (updatedField.includes('rawMaterialQty')) {
-                                                //     previousData.rawMaterialQty = previousData.rawMaterialQty + ' ' + previousData.rawMaterialUnit;
-                                                //     newData.rawMaterialQty = newData.rawMaterialQty + ' ' + rawMaterialUnit;
-                                                //     console.log('chavda', newData);
-                                                // }
-                                                // else if (updatedField.includes('rawMaterialUnit')) {
-                                                //     previousData.rawMaterialUnit = previousData.rawMaterialQty + ' ' + previousData.rawMaterialUnit;
-                                                //     newData.rawMaterialUnit = newData.rawMaterialQty + ' ' + rawMaterialUnit;
-                                                //     console.log('chavda else', newData);
-                                                // }
-                                                // console.log('parmar out', newData);
-                                                if (updatedField == null || updatedField == '') {
-                                                    return res.status(500).send('No Change');
-                                                }
+                                                console.log(">>>???", prevoiusQuantity);
+                                                console.log(">>>", req.body.rawMaterialQty);
+                                                console.log("jo loda", updatedField);
+                                                if (prevoiusQuantity < productFinalQty) {
+                                                    const orignalStockInData = Object.values(JSON.parse(JSON.stringify(data[0])));
+                                                    const stockInData = Object.values(JSON.parse(JSON.stringify(data[0])));
+                                                    const oldIdsArray = Object.values(JSON.parse(JSON.stringify(data[1])));
+                                                    console.log(">>>", Object.values(JSON.parse(JSON.stringify(data[1]))));
+                                                    console.log("::::::::", productFinalQty - prevoiusQuantity);
+                                                    const stockOutData = [
+                                                        { rawMaterialId: req.body.rawMaterialId, stockOutQuantity: productFinalQty - prevoiusQuantity }
+                                                    ];
 
-                                                sql_querry_getStockIndetail = `SELECT rmStockInId, rawMaterialId, rawMaterialQty, rawMaterialPrice AS stockInPrice, remainingQty AS stockInQuantity FROM factory_rmStockIn_data WHERE factory_rmStockIn_data.rawMaterialId = '${rawMaterialId}' AND factory_rmStockIn_data.remainingQty != 0 ORDER BY rmStockInDate ASC;
-                                                           SELECT rmStockInId FROM factory_stockOutwiseStockInId_data WHERE rmStockOutId = '${rmStockOutId}'`;
-                                                pool.query(sql_querry_getStockIndetail, (err, data) => {
-                                                    if (err) {
-                                                        console.error("An error occurd in SQL Queery", err);
-                                                        return res.status(500).send('Database Error');
+                                                    // Desired quantity
+                                                    const desiredQuantity = stockOutData[0].stockOutQuantity;
+                                                    console.log("?????", desiredQuantity);
+
+                                                    // Calculate total stock out price
+                                                    let remainingQuantity = desiredQuantity;
+                                                    let totalStockOutPrice = 0;
+
+                                                    // Sort stock in data by stock in price in ascending order
+                                                    const sortedStockInData = stockInData
+                                                    // const sortedStockInData = stockInData.sort((a, b) => a.stockInPrice - b.stockInPrice);
+                                                    for (const stockOut of stockOutData) {
+                                                        let stockOutQuantity = stockOut.stockOutQuantity;
+
+                                                        for (const stockIn of sortedStockInData) {
+                                                            const { stockInQuantity, stockInPrice } = stockIn;
+
+                                                            if (stockInQuantity > 0) {
+                                                                const quantityToUse = Math.min(stockOutQuantity, stockInQuantity, remainingQuantity);
+                                                                const rmStockOutPrice = stockInPrice * quantityToUse;
+
+                                                                totalStockOutPrice += rmStockOutPrice;
+                                                                remainingQuantity -= quantityToUse;
+                                                                stockOutQuantity -= quantityToUse;
+                                                                stockIn.stockInQuantity -= quantityToUse;
+
+                                                                if (remainingQuantity <= 0) {
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+
+                                                        if (remainingQuantity <= 0) {
+                                                            break;
+                                                        }
                                                     }
-                                                    console.log(">>>???", prevoiusQuantity);
-                                                    console.log(">>>", req.body.rawMaterialQty);
-                                                    console.log("jo loda", updatedField);
-                                                    if (prevoiusQuantity < productFinalQty) {
-                                                        const orignalStockInData = Object.values(JSON.parse(JSON.stringify(data[0])));
-                                                        const stockInData = Object.values(JSON.parse(JSON.stringify(data[0])));
-                                                        const oldIdsArray = Object.values(JSON.parse(JSON.stringify(data[1])));
-                                                        console.log(">>>", Object.values(JSON.parse(JSON.stringify(data[1]))));
-                                                        console.log("::::::::", productFinalQty - prevoiusQuantity);
+
+                                                    // Print updated stockInData
+                                                    console.log("Updated stockInData:", stockInData);
+
+                                                    console.log("Total Stock Out Price:", totalStockOutPrice);
+                                                    const totalofStockOutPrice = previousStockOutPrice + totalStockOutPrice;
+                                                    const rmStockOutPrice = Number(totalofStockOutPrice).toFixed(2);
+
+                                                    const sopq = stockInData.filter((obj) => {
+                                                        if (obj.stockInQuantity != obj.rawMaterialQty) {
+                                                            return obj;
+                                                        }
+                                                    })
+
+                                                    const sowsiId = sopq.map((obj) => {
+                                                        if (obj.stockInQuantity != obj.rawMaterialQty) {
+                                                            return obj.rmStockInId;
+                                                        }
+                                                    });
+
+                                                    const oldId = oldIdsArray.map((obj) => {
+                                                        return obj.rmStockInId;
+                                                    });
+
+                                                    const similarStockInIds = sowsiId.filter(id => oldId.includes(id));
+
+                                                    const removeSameId = sowsiId.filter(id => !similarStockInIds.includes(id));
+
+                                                    console.log('jojojojojo', removeSameId);
+
+                                                    if (similarStockInIds.length != 0) {
+                                                        const remainingStockByIds = similarStockInIds.map(rmStockInId => {
+                                                            const stockIn = orignalStockInData.find(item => item.rmStockInId === rmStockInId);
+                                                            return stockIn ? stockIn.stockInQuantity : undefined;
+                                                        });
+
+                                                        const remainingStockByIds1 = similarStockInIds.map(rmStockInId => {
+                                                            const stockIn = stockInData.find(item => item.rmStockInId === rmStockInId);
+                                                            return stockIn ? stockIn.stockInQuantity : undefined;
+                                                        });
+
+                                                        console.log('orignalStockInData', remainingStockByIds);
+                                                        console.log('stockInData', remainingStockByIds1);
+
+                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+
+                                                        console.log(';;;;;;;;', stockInData)
+                                                        console.log('???????', orignalStockInData);
+                                                        console.log(">?>?>?<<<<.,,,", sowsiId);
+                                                        console.log(">?>?>?<<<<.,,,", oldId);
+                                                        console.log('same id', similarStockInIds);
+                                                        console.log("RRRRR", remainStockCutQty);
+                                                        sql_qurey_updateExistingId = `UPDATE factory_stockOutwiseStockInId_data SET cutRmQty = cutRmQty + ${remainStockCutQty[0]} WHERE rmStockOutId = '${rmStockOutId}' AND rmStockInId = '${similarStockInIds[0]}'`;
+                                                        pool.query(sql_qurey_updateExistingId, (err, result) => {
+                                                            if (err) {
+                                                                console.error("An error occurd in SQL Queery", err);
+                                                                return res.status(500).send('Database Error');
+                                                            }
+                                                            console.log('Existing Data Updated SuccessFully');
+                                                        })
+                                                    }
+
+                                                    if (removeSameId.length != 0) {
+                                                        const remainingStockByIds = removeSameId.map(rmStockInId => {
+                                                            const stockIn = orignalStockInData.find(item => item.rmStockInId === rmStockInId);
+                                                            return stockIn ? stockIn.stockInQuantity : undefined;
+                                                        });
+
+                                                        const remainingStockByIds1 = removeSameId.map(rmStockInId => {
+                                                            const stockIn = stockInData.find(item => item.rmStockInId === rmStockInId);
+                                                            return stockIn ? stockIn.stockInQuantity : undefined;
+                                                        });
+
+                                                        console.log('orignalStockInData', remainingStockByIds);
+                                                        console.log('stockInData', remainingStockByIds1);
+
+                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+
+                                                        console.log(';;;;;;;;', stockInData)
+                                                        console.log('???????', orignalStockInData);
+                                                        console.log(">?>?>?<<<<.,,,", sowsiId);
+                                                        console.log(">?>?>?<<<<.,,,", oldId);
+                                                        console.log('same id', similarStockInIds);
+                                                        console.log("RRRRR", remainStockCutQty);
+
+                                                        // Use map to combine the arrays and format them
+                                                        const combinedData = removeSameId.map((id, index) => `('${rmStockOutId}','${id}',ROUND(${remainStockCutQty[index]},2))`);
+
+                                                        // Join the array elements into a single string
+                                                        const stockOutWiseStockInId = combinedData.join(',');
+
+                                                        // Output the resulting string
+                                                        console.log(stockOutWiseStockInId);
+
+                                                        sql_querry_addsowsiId = `INSERT INTO factory_stockOutwiseStockInId_data (rmStockOutId, rmStockInId, cutRmQty) VALUES ${stockOutWiseStockInId}`;
+                                                        pool.query(sql_querry_addsowsiId, (err, data) => {
+                                                            if (err) {
+                                                                console.error("An error occurd in SQL Queery", err);
+                                                                return res.status(500).send('Database Error');
+                                                            }
+                                                            console.log("Data Added Successfully");
+                                                        })
+                                                    }
+
+                                                    function generateUpdateQuery(data) {
+                                                        let query = 'UPDATE factory_rmStockIn_data\nSET remainingQty = CASE\n';
+
+                                                        data.forEach((item) => {
+                                                            const { rmStockInId, stockInQuantity } = item;
+                                                            query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${stockInQuantity},2)\n`;
+                                                        });
+
+                                                        query += '    ELSE remainingQty\nEND\n';
+
+                                                        const stockInIds = data.map((item) => `'${item.rmStockInId}'`).join(', ');
+                                                        query += `WHERE rmStockInId IN (${stockInIds});`;
+
+                                                        return query;
+                                                    }
+
+                                                    console.log(generateUpdateQuery(sopq))
+                                                    const sql_qurey_updatedRemainQty = generateUpdateQuery(sopq);
+                                                    pool.query(sql_qurey_updatedRemainQty, (err, data) => {
+                                                        if (err) {
+                                                            console.error("An error occurd in SQL Queery", err);
+                                                            return res.status(500).send('Database Error');
+                                                        }
+                                                        const editFields = () => {
+                                                            var string = ''
+                                                            updatedField.forEach((data, index) => {
+                                                                if (index == 0)
+                                                                    string = "(" + "'" + rmStockOutId + "'" + "," + "'" + userId + "'" + "," + "'" + rawMaterialId + "'" + "," + "'" + previousData[data] + "'" + "," + "'" + newData[data] + "'" + "," + "'" + reason + "'" + "," + "STR_TO_DATE('" + rmStockOutModificationDate + "','%b %d %Y %H:%i:%s')" + "," + "STR_TO_DATE('" + currentModifyDate + "','%b %d %Y %H:%i:%s')" + ")";
+                                                                else
+                                                                    string = string + ",(" + "'" + rmStockOutId + "'" + "," + "'" + userId + "'" + "," + "'" + rawMaterialId + "'" + "," + "'" + previousData[data] + "'" + "," + "'" + newData[data] + "'" + "," + "'" + reason + "'" + "," + "STR_TO_DATE('" + rmStockOutModificationDate + "','%b %d %Y %H:%i:%s')" + "," + "STR_TO_DATE('" + currentModifyDate + "','%b %d %Y %H:%i:%s')" + ")";
+                                                            });
+                                                            return string;
+                                                        }
+
+                                                        console.log(">>>>>>>><<<<<<<<<", editFields());
+                                                        const sql_querry_addPreviousData = `INSERT INTO factory_rmModified_history  (
+                                                                                                rmStockOutId,
+                                                                                                userId,
+                                                                                                rawMaterialId,
+                                                                                                previous,
+                                                                                                updated,
+                                                                                                modifiedReason,
+                                                                                                previousDateTime,
+                                                                                                updatedDateTime
+                                                                                            )
+                                                                                            VALUES ${editFields()}`;
+                                                        console.log(">>.....", sql_querry_addPreviousData);
+                                                        pool.query(sql_querry_addPreviousData, (err, data) => {
+                                                            if (err) {
+                                                                console.error("An error occurd in SQL Queery", err);
+                                                                return res.status(500).send('Database Error');
+                                                            }
+                                                            console.log(">?>?>?>?,,,", rmStockOutCategory);
+                                                            const sql_querry_updatedetails = `UPDATE factory_rmStockOut_data SET 
+                                                                                                      userId = '${userId}',
+                                                                                                      rawMaterialId = '${rawMaterialId}',
+                                                                                                      rawMaterialQty = ${productFinalQty},
+                                                                                                      rmStockOutPrice = ${rmStockOutPrice},
+                                                                                                      rmStockOutDisplayQty = ${rawMaterialQty},
+                                                                                                      rmStockOutDisplayUnit = '${rawMaterialUnit}',
+                                                                                                      rmStockOutCategory = '${rmStockOutCategory}',
+                                                                                                      rmStockOutComment = NULLIF('${rmStockOutComment}','null'),
+                                                                                                      rmStockOutDate = STR_TO_DATE('${rmStockOutDate}','%b %d %Y') 
+                                                                                                WHERE rmStockOutId = '${rmStockOutId}';
+                                                                                                UPDATE inventory_stockIn_data SET
+                                                                                                      branchId = '${branchId}',
+                                                                                                      userId = '${userId}',
+                                                                                                      productId = '${rawMaterialId}',
+                                                                                                      productQty = ${StockInProductFinalQty},
+                                                                                                      productPrice = ${rmStockOutPrice / StockInProductFinalQty},
+                                                                                                      totalPrice = ${rmStockOutPrice},
+                                                                                                      billNumber = ${billNumber ? `'${billNumber}'` : null},
+                                                                                                      stockInDisplayQty = ${rawMaterialQty},
+                                                                                                      stockInDisplayUnit = '${rawMaterialUnit}',
+                                                                                                      supplierId = '${process.env.RAJ_MANDIR_FACTORY_ID}',
+                                                                                                      stockInPaymentMethod = 'cash',
+                                                                                                      stockInComment = ${rmStockOutComment ? `'${rmStockOutComment}'` : null},
+                                                                                                      productExpiryDate = ${stockInneedData && stockInneedData.isExpired && stockInneedData.expiredDays > 0 ? `DATE_ADD(STR_TO_DATE('${rmStockOutDate}','%b %d %Y'), INTERVAL ${stockInneedData.expiredDays} DAY)` : null},
+                                                                                                      remainingQty = ${StockInProductFinalQty},
+                                                                                                      stockInDate = STR_TO_DATE('${rmStockOutDate}','%b %d %Y') 
+                                                                                                WHERE stockInId = '${rmStockOutId}'`;
+                                                            pool.query(sql_querry_updatedetails, (err, data) => {
+                                                                if (err) {
+                                                                    console.error("An error occurd in SQL Queery", err);
+                                                                    return res.status(500).send('Database Error');
+                                                                }
+                                                                return res.status(200).send("Transaction Updated Successfully");
+                                                            })
+                                                        })
+                                                    })
+                                                } else if (req.body.rawMaterialQty == 0) {
+                                                    return res.status(401).send('Please Delete Transaction');
+                                                } else if (prevoiusQuantity > productFinalQty) {
+                                                    console.log('222222222222', prevoiusQuantity, productFinalQty, prevoiusQuantity > productFinalQty)
+                                                    sql_get_sowsoid = `SELECT
+                                                                        factory_rmStockIn_data.rmStockInId,
+                                                                        rawMaterialId,
+                                                                        (
+                                                                            factory_rmStockIn_data.remainingQty + sowsid.cutRmQty
+                                                                        ) AS rawMaterialQty,
+                                                                        rawMaterialPrice AS stockInPrice,
+                                                                        remainingQty AS remainingStock
+                                                                    FROM
+                                                                        factory_rmStockIn_data
+                                                                    INNER JOIN(
+                                                                        SELECT
+                                                                            factory_stockOutwiseStockInId_data.rmStockInId,
+                                                                            factory_stockOutwiseStockInId_data.cutRmQty AS cutRmQty
+                                                                        FROM
+                                                                            factory_stockOutwiseStockInId_data
+                                                                        WHERE
+                                                                            factory_stockOutwiseStockInId_data.rmStockOutId = '${rmStockOutId}'
+                                                                    ) AS sowsid
+                                                                    ON
+                                                                        factory_rmStockIn_data.rmStockInId = sowsid.rmStockInId
+                                                                    WHERE
+                                                                        factory_rmStockIn_data.rmStockInId IN(
+                                                                        SELECT
+                                                                            COALESCE(
+                                                                                factory_stockOutwiseStockInId_data.rmStockInId,
+                                                                                NULL
+                                                                            )
+                                                                        FROM
+                                                                            factory_stockOutwiseStockInId_data
+                                                                        WHERE
+                                                                            rmStockOutId = '${rmStockOutId}'
+                                                                    )
+                                                                    ORDER BY
+                                                                        stockInCreationDate ASC`;
+                                                    pool.query(sql_get_sowsoid, (err, data) => {
+                                                        if (err) {
+                                                            console.error("An error occurd in SQL Queery", err);
+                                                            return res.status(500).send('Database Error');
+                                                        }
+                                                        const junoJson = Object.values(JSON.parse(JSON.stringify(data)));
+                                                        console.log("Juno Json", junoJson);
+                                                        const StockInData = Object.values(JSON.parse(JSON.stringify(data)));
+                                                        console.log("::::::::", prevoiusQuantity - productFinalQty);
                                                         const stockOutData = [
-                                                            { rawMaterialId: req.body.rawMaterialId, stockOutQuantity: productFinalQty - prevoiusQuantity }
+                                                            { rawMaterialId: req.body.rawMaterialId, stockOutQuantity: prevoiusQuantity - productFinalQty }
                                                         ];
 
-                                                        // Desired quantity
-                                                        const desiredQuantity = stockOutData[0].stockOutQuantity;
-                                                        console.log("?????", desiredQuantity);
+                                                        // const StockInData = [
+                                                        //     { rawMaterialId: 1, remainingStock: 5, rawMaterialQty: 5, stockInPrice: 70 },
+                                                        //     { rawMaterialId: 1, remainingStock: 5, rawMaterialQty: 5, stockInPrice: 60 },
+                                                        //     { rawMaterialId: 1, remainingStock: 2, rawMaterialQty: 5, stockInPrice: 50 },
+                                                        //     { rawMaterialId: 1, remainingStock: 0, rawMaterialQty: 5, stockInPrice: 40 },
+                                                        //     { rawMaterialId: 1, remainingStock: 0, rawMaterialQty: 5, stockInPrice: 30 },
+                                                        // ];
 
-                                                        // Calculate total stock out price
-                                                        let remainingQuantity = desiredQuantity;
-                                                        let totalStockOutPrice = 0;
+                                                        let desiredQuantity = stockOutData[0].stockOutQuantity; // Desired quantity to be inserted into the buckets
+                                                        console.log("><?", desiredQuantity);
+                                                        let totalCost = 0; // Total cost of filling the buckets
 
-                                                        // Sort stock in data by stock in price in ascending order
-                                                        const sortedStockInData = stockInData
-                                                        // const sortedStockInData = stockInData.sort((a, b) => a.stockInPrice - b.stockInPrice);
-                                                        for (const stockOut of stockOutData) {
-                                                            let stockOutQuantity = stockOut.stockOutQuantity;
+                                                        for (let i = 0; i < StockInData.length; i++) {
+                                                            const stockIn = StockInData[i];
+                                                            const availableSpace = stockIn.rawMaterialQty - stockIn.remainingStock; // Calculate the available space for the product
 
-                                                            for (const stockIn of sortedStockInData) {
-                                                                const { stockInQuantity, stockInPrice } = stockIn;
-
-                                                                if (stockInQuantity > 0) {
-                                                                    const quantityToUse = Math.min(stockOutQuantity, stockInQuantity, remainingQuantity);
-                                                                    const rmStockOutPrice = stockInPrice * quantityToUse;
-
-                                                                    totalStockOutPrice += rmStockOutPrice;
-                                                                    remainingQuantity -= quantityToUse;
-                                                                    stockOutQuantity -= quantityToUse;
-                                                                    stockIn.stockInQuantity -= quantityToUse;
-
-                                                                    if (remainingQuantity <= 0) {
-                                                                        break;
-                                                                    }
-                                                                }
-                                                            }
-
-                                                            if (remainingQuantity <= 0) {
-                                                                break;
+                                                            if (desiredQuantity <= availableSpace) {
+                                                                // If the desired quantity can fit completely in the current stock in entry
+                                                                stockIn.remainingStock += desiredQuantity;
+                                                                totalCost += desiredQuantity * stockIn.stockInPrice;
+                                                                break; // Exit the loop since the desired quantity has been inserted
+                                                            } else {
+                                                                // If the desired quantity cannot fit completely in the current stock in entry
+                                                                stockIn.remainingStock = stockIn.rawMaterialQty;
+                                                                totalCost += availableSpace * stockIn.stockInPrice;
+                                                                desiredQuantity -= availableSpace;
                                                             }
                                                         }
+                                                        const updatedStockInData = StockInData;
+                                                        console.log("Updated StockInData:", StockInData);
+                                                        console.log("Total Cost of Filling: ", totalCost);
 
-                                                        // Print updated stockInData
-                                                        console.log("Updated stockInData:", stockInData);
-
-                                                        console.log("Total Stock Out Price:", totalStockOutPrice);
-                                                        const totalofStockOutPrice = previousStockOutPrice + totalStockOutPrice;
+                                                        const totalofStockOutPrice = previousStockOutPrice - totalCost;
                                                         const rmStockOutPrice = Number(totalofStockOutPrice).toFixed(2);
 
-                                                        const sopq = stockInData.filter((obj) => {
-                                                            if (obj.stockInQuantity != obj.rawMaterialQty) {
-                                                                return obj;
-                                                            }
+                                                        const sopq = StockInData.filter((obj) => {
+                                                            return obj;
                                                         })
-
-                                                        const sowsiId = sopq.map((obj) => {
-                                                            if (obj.stockInQuantity != obj.rawMaterialQty) {
-                                                                return obj.rmStockInId;
-                                                            }
-                                                        });
-
-                                                        const oldId = oldIdsArray.map((obj) => {
+                                                        const sowsiId = StockInData.map((obj) => {
                                                             return obj.rmStockInId;
+                                                        })
+                                                        const remainingStockByIds = sowsiId.map(rmStockInId => {
+                                                            const stockIn = junoJson.find(item => item.rmStockInId === rmStockInId);
+                                                            return stockIn ? stockIn.rawMaterialQty : undefined;
                                                         });
 
-                                                        const similarStockInIds = sowsiId.filter(id => oldId.includes(id));
+                                                        const remainingStockByIds1 = sowsiId.map(rmStockInId => {
+                                                            const stockIn = updatedStockInData.find(item => item.rmStockInId === rmStockInId);
+                                                            return stockIn ? stockIn.remainingStock : undefined;
+                                                        });
 
-                                                        const removeSameId = sowsiId.filter(id => !similarStockInIds.includes(id));
+                                                        console.log('orignalStockInData', remainingStockByIds);
+                                                        console.log('stockInData', remainingStockByIds1);
 
-                                                        console.log('jojojojojo', removeSameId);
+                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
 
-                                                        if (similarStockInIds.length != 0) {
-                                                            const remainingStockByIds = similarStockInIds.map(rmStockInId => {
-                                                                const stockIn = orignalStockInData.find(item => item.rmStockInId === rmStockInId);
-                                                                return stockIn ? stockIn.stockInQuantity : undefined;
-                                                            });
+                                                        console.log(';;;;;;;;', junoJson)
+                                                        console.log('???????', updatedStockInData);
+                                                        console.log(">?>?>?<<<<.,,,", sowsiId);
+                                                        console.log("RRRRR", remainStockCutQty);
 
-                                                            const remainingStockByIds1 = similarStockInIds.map(rmStockInId => {
-                                                                const stockIn = stockInData.find(item => item.rmStockInId === rmStockInId);
-                                                                return stockIn ? stockIn.stockInQuantity : undefined;
-                                                            });
+                                                        const idsToDelete = sowsiId.map(item => `'${item}'`).join(',');
+                                                        console.log('jgjgjjgjgjg', idsToDelete);
 
-                                                            console.log('orignalStockInData', remainingStockByIds);
-                                                            console.log('stockInData', remainingStockByIds1);
+                                                        const filteredId = sowsiId.filter((_, index) => remainStockCutQty[index] !== 0);
+                                                        const filteredQty = remainStockCutQty.filter(qtyValue => qtyValue !== 0);
 
-                                                            const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                        console.log('Id Mate Jovu', filteredId);
+                                                        console.log('Qty Mate Jovu', filteredQty);
 
-                                                            console.log(';;;;;;;;', stockInData)
-                                                            console.log('???????', orignalStockInData);
-                                                            console.log(">?>?>?<<<<.,,,", sowsiId);
-                                                            console.log(">?>?>?<<<<.,,,", oldId);
-                                                            console.log('same id', similarStockInIds);
-                                                            console.log("RRRRR", remainStockCutQty);
-                                                            sql_qurey_updateExistingId = `UPDATE factory_stockOutwiseStockInId_data SET cutRmQty = cutRmQty + ${remainStockCutQty[0]} WHERE rmStockOutId = '${rmStockOutId}' AND rmStockInId = '${similarStockInIds[0]}'`;
-                                                            pool.query(sql_qurey_updateExistingId, (err, result) => {
-                                                                if (err) {
-                                                                    console.error("An error occurd in SQL Queery", err);
-                                                                    return res.status(500).send('Database Error');
-                                                                }
-                                                                console.log('Existing Data Updated SuccessFully');
-                                                            })
-                                                        }
+                                                        const combinedData = filteredId.map((id, index) => `('${rmStockOutId}','${id}',ROUND(${filteredQty[index]},2))`);
 
-                                                        if (removeSameId.length != 0) {
-                                                            const remainingStockByIds = removeSameId.map(rmStockInId => {
-                                                                const stockIn = orignalStockInData.find(item => item.rmStockInId === rmStockInId);
-                                                                return stockIn ? stockIn.stockInQuantity : undefined;
-                                                            });
+                                                        // Join the array elements into a single string
+                                                        const stockOutWiseStockInId = combinedData.join(',');
 
-                                                            const remainingStockByIds1 = removeSameId.map(rmStockInId => {
-                                                                const stockIn = stockInData.find(item => item.rmStockInId === rmStockInId);
-                                                                return stockIn ? stockIn.stockInQuantity : undefined;
-                                                            });
-
-                                                            console.log('orignalStockInData', remainingStockByIds);
-                                                            console.log('stockInData', remainingStockByIds1);
-
-                                                            const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
-
-                                                            console.log(';;;;;;;;', stockInData)
-                                                            console.log('???????', orignalStockInData);
-                                                            console.log(">?>?>?<<<<.,,,", sowsiId);
-                                                            console.log(">?>?>?<<<<.,,,", oldId);
-                                                            console.log('same id', similarStockInIds);
-                                                            console.log("RRRRR", remainStockCutQty);
-
-                                                            // Use map to combine the arrays and format them
-                                                            const combinedData = removeSameId.map((id, index) => `('${rmStockOutId}','${id}',ROUND(${remainStockCutQty[index]},2))`);
-
-                                                            // Join the array elements into a single string
-                                                            const stockOutWiseStockInId = combinedData.join(',');
-
-                                                            // Output the resulting string
-                                                            console.log(stockOutWiseStockInId);
-
-                                                            sql_querry_addsowsiId = `INSERT INTO factory_stockOutwiseStockInId_data (rmStockOutId, rmStockInId, cutRmQty) VALUES ${stockOutWiseStockInId}`;
-                                                            pool.query(sql_querry_addsowsiId, (err, data) => {
-                                                                if (err) {
-                                                                    console.error("An error occurd in SQL Queery", err);
-                                                                    return res.status(500).send('Database Error');
-                                                                }
-                                                                console.log("Data Added Successfully");
-                                                            })
-                                                        }
+                                                        // Output the resulting string
+                                                        console.log(stockOutWiseStockInId);
 
                                                         function generateUpdateQuery(data) {
                                                             let query = 'UPDATE factory_rmStockIn_data\nSET remainingQty = CASE\n';
 
                                                             data.forEach((item) => {
-                                                                const { rmStockInId, stockInQuantity } = item;
-                                                                query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${stockInQuantity},2)\n`;
+                                                                const { rmStockInId, remainingStock } = item;
+                                                                query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${remainingStock},2)\n`;
                                                             });
 
                                                             query += '    ELSE remainingQty\nEND\n';
 
                                                             const stockInIds = data.map((item) => `'${item.rmStockInId}'`).join(', ');
-                                                            query += `WHERE rmStockInId IN (${stockInIds});`;
+                                                            query += `WHERE rmStockInId IN (${stockInIds})`;
 
                                                             return query;
                                                         }
 
                                                         console.log(generateUpdateQuery(sopq))
-                                                        const sql_qurey_updatedRemainQty = generateUpdateQuery(sopq);
+                                                        const sql_qurey_updatedRemainQty = `${generateUpdateQuery(sopq)};
+                                                                        DELETE FROM factory_stockOutwiseStockInId_data WHERE rmStockOutId = '${rmStockOutId}';
+                                                                        INSERT INTO factory_stockOutwiseStockInId_data (rmStockOutId, rmStockInId, cutRmQty) VALUES ${stockOutWiseStockInId}`;
                                                         pool.query(sql_qurey_updatedRemainQty, (err, data) => {
                                                             if (err) {
                                                                 console.error("An error occurd in SQL Queery", err);
@@ -1159,230 +1383,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                                     return res.status(500).send('Database Error');
                                                                 }
                                                                 console.log(">?>?>?>?,,,", rmStockOutCategory);
-                                                                const sql_querry_updatedetails = `UPDATE factory_rmStockOut_data SET 
-                                                                                                      userId = '${userId}',
-                                                                                                      rawMaterialId = '${rawMaterialId}',
-                                                                                                      rawMaterialQty = ${productFinalQty},
-                                                                                                      rmStockOutPrice = ${rmStockOutPrice},
-                                                                                                      rmStockOutDisplayQty = ${rawMaterialQty},
-                                                                                                      rmStockOutDisplayUnit = '${rawMaterialUnit}',
-                                                                                                      rmStockOutCategory = '${rmStockOutCategory}',
-                                                                                                      rmStockOutComment = NULLIF('${rmStockOutComment}','null'),
-                                                                                                      rmStockOutDate = STR_TO_DATE('${rmStockOutDate}','%b %d %Y') 
-                                                                                                WHERE rmStockOutId = '${rmStockOutId}';
-                                                                                                UPDATE inventory_stockIn_data SET
-                                                                                                      branchId = '${branchId}',
-                                                                                                      userId = '${userId}',
-                                                                                                      productId = '${rawMaterialId}',
-                                                                                                      productQty = ${StockInProductFinalQty},
-                                                                                                      productPrice = ${rmStockOutPrice / StockInProductFinalQty},
-                                                                                                      totalPrice = ${rmStockOutPrice},
-                                                                                                      billNumber = ${billNumber ? `'${billNumber}'` : null},
-                                                                                                      stockInDisplayQty = ${rawMaterialQty},
-                                                                                                      stockInDisplayUnit = '${rawMaterialUnit}'
-                                                                                                      supplierId = '${process.env.RAJ_MANDIR_FACTORY_ID}',
-                                                                                                      stockInPaymentMethod = 'cash',
-                                                                                                      stockInComment = ${rmStockOutComment ? `'${rmStockOutComment}'` : null},
-                                                                                                      productExpiryDate = ${stockInneedData && stockInneedData.isExpired && stockInneedData.expiredDays > 0 ? `DATE_ADD(STR_TO_DATE('${rmStockOutDate}','%b %d %Y'), INTERVAL ${stockInneedData.expiredDays} DAY)` : null},
-                                                                                                      remainingQty = ${StockInProductFinalQty},
-                                                                                                      stockInDate = STR_TO_DATE('${rmStockOutDate}','%b %d %Y') 
-                                                                                                WHERE stockInId = '${rawMaterialId}'`;
-                                                                pool.query(sql_querry_updatedetails, (err, data) => {
-                                                                    if (err) {
-                                                                        console.error("An error occurd in SQL Queery", err);
-                                                                        return res.status(500).send('Database Error');
-                                                                    }
-                                                                    return res.status(200).send("Transaction Updated Successfully");
-                                                                })
-                                                            })
-                                                        })
-                                                    } else if (req.body.rawMaterialQty == 0) {
-                                                        return res.status(401).send('Please Delete Transaction');
-                                                    } else if (prevoiusQuantity > productFinalQty) {
-                                                        console.log('222222222222', prevoiusQuantity, productFinalQty, prevoiusQuantity > productFinalQty)
-                                                        sql_get_sowsoid = `SELECT
-                                                    factory_rmStockIn_data.rmStockInId,
-                                                    rawMaterialId,
-                                                    (
-                                                        factory_rmStockIn_data.remainingQty + sowsid.cutRmQty
-                                                    ) AS rawMaterialQty,
-                                                    rawMaterialPrice AS stockInPrice,
-                                                    remainingQty AS remainingStock
-                                                FROM
-                                                    factory_rmStockIn_data
-                                                INNER JOIN(
-                                                    SELECT
-                                                        factory_stockOutwiseStockInId_data.rmStockInId,
-                                                        factory_stockOutwiseStockInId_data.cutRmQty AS cutRmQty
-                                                    FROM
-                                                        factory_stockOutwiseStockInId_data
-                                                    WHERE
-                                                        factory_stockOutwiseStockInId_data.rmStockOutId = '${rmStockOutId}'
-                                                ) AS sowsid
-                                                ON
-                                                    factory_rmStockIn_data.rmStockInId = sowsid.rmStockInId
-                                                WHERE
-                                                    factory_rmStockIn_data.rmStockInId IN(
-                                                    SELECT
-                                                        COALESCE(
-                                                            factory_stockOutwiseStockInId_data.rmStockInId,
-                                                            NULL
-                                                        )
-                                                    FROM
-                                                        factory_stockOutwiseStockInId_data
-                                                    WHERE
-                                                        rmStockOutId = '${rmStockOutId}'
-                                                )
-                                                ORDER BY
-                                                    stockInCreationDate ASC`;
-                                                        console.log(">>><<<", sql_get_sowsoid);
-                                                        pool.query(sql_get_sowsoid, (err, data) => {
-                                                            if (err) {
-                                                                console.error("An error occurd in SQL Queery", err);
-                                                                return res.status(500).send('Database Error');
-                                                            }
-                                                            const junoJson = Object.values(JSON.parse(JSON.stringify(data)));
-                                                            console.log("Juno Json", junoJson);
-                                                            const StockInData = Object.values(JSON.parse(JSON.stringify(data)));
-                                                            console.log("::::::::", prevoiusQuantity - productFinalQty);
-                                                            const stockOutData = [
-                                                                { rawMaterialId: req.body.rawMaterialId, stockOutQuantity: prevoiusQuantity - productFinalQty }
-                                                            ];
-
-                                                            // const StockInData = [
-                                                            //     { rawMaterialId: 1, remainingStock: 5, rawMaterialQty: 5, stockInPrice: 70 },
-                                                            //     { rawMaterialId: 1, remainingStock: 5, rawMaterialQty: 5, stockInPrice: 60 },
-                                                            //     { rawMaterialId: 1, remainingStock: 2, rawMaterialQty: 5, stockInPrice: 50 },
-                                                            //     { rawMaterialId: 1, remainingStock: 0, rawMaterialQty: 5, stockInPrice: 40 },
-                                                            //     { rawMaterialId: 1, remainingStock: 0, rawMaterialQty: 5, stockInPrice: 30 },
-                                                            // ];
-
-                                                            let desiredQuantity = stockOutData[0].stockOutQuantity; // Desired quantity to be inserted into the buckets
-                                                            console.log("><?", desiredQuantity);
-                                                            let totalCost = 0; // Total cost of filling the buckets
-
-                                                            for (let i = 0; i < StockInData.length; i++) {
-                                                                const stockIn = StockInData[i];
-                                                                const availableSpace = stockIn.rawMaterialQty - stockIn.remainingStock; // Calculate the available space for the product
-
-                                                                if (desiredQuantity <= availableSpace) {
-                                                                    // If the desired quantity can fit completely in the current stock in entry
-                                                                    stockIn.remainingStock += desiredQuantity;
-                                                                    totalCost += desiredQuantity * stockIn.stockInPrice;
-                                                                    break; // Exit the loop since the desired quantity has been inserted
-                                                                } else {
-                                                                    // If the desired quantity cannot fit completely in the current stock in entry
-                                                                    stockIn.remainingStock = stockIn.rawMaterialQty;
-                                                                    totalCost += availableSpace * stockIn.stockInPrice;
-                                                                    desiredQuantity -= availableSpace;
-                                                                }
-                                                            }
-                                                            const updatedStockInData = StockInData;
-                                                            console.log("Updated StockInData:", StockInData);
-                                                            console.log("Total Cost of Filling: ", totalCost);
-
-                                                            const totalofStockOutPrice = previousStockOutPrice - totalCost;
-                                                            const rmStockOutPrice = Number(totalofStockOutPrice).toFixed(2);
-
-                                                            const sopq = StockInData.filter((obj) => {
-                                                                return obj;
-                                                            })
-                                                            const sowsiId = StockInData.map((obj) => {
-                                                                return obj.rmStockInId;
-                                                            })
-                                                            const remainingStockByIds = sowsiId.map(rmStockInId => {
-                                                                const stockIn = junoJson.find(item => item.rmStockInId === rmStockInId);
-                                                                return stockIn ? stockIn.rawMaterialQty : undefined;
-                                                            });
-
-                                                            const remainingStockByIds1 = sowsiId.map(rmStockInId => {
-                                                                const stockIn = updatedStockInData.find(item => item.rmStockInId === rmStockInId);
-                                                                return stockIn ? stockIn.remainingStock : undefined;
-                                                            });
-
-                                                            console.log('orignalStockInData', remainingStockByIds);
-                                                            console.log('stockInData', remainingStockByIds1);
-
-                                                            const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
-
-                                                            console.log(';;;;;;;;', junoJson)
-                                                            console.log('???????', updatedStockInData);
-                                                            console.log(">?>?>?<<<<.,,,", sowsiId);
-                                                            console.log("RRRRR", remainStockCutQty);
-
-                                                            const idsToDelete = sowsiId.map(item => `'${item}'`).join(',');
-                                                            console.log('jgjgjjgjgjg', idsToDelete);
-
-                                                            const filteredId = sowsiId.filter((_, index) => remainStockCutQty[index] !== 0);
-                                                            const filteredQty = remainStockCutQty.filter(qtyValue => qtyValue !== 0);
-
-                                                            console.log('Id Mate Jovu', filteredId);
-                                                            console.log('Qty Mate Jovu', filteredQty);
-
-                                                            const combinedData = filteredId.map((id, index) => `('${rmStockOutId}','${id}',ROUND(${filteredQty[index]},2))`);
-
-                                                            // Join the array elements into a single string
-                                                            const stockOutWiseStockInId = combinedData.join(',');
-
-                                                            // Output the resulting string
-                                                            console.log(stockOutWiseStockInId);
-
-                                                            function generateUpdateQuery(data) {
-                                                                let query = 'UPDATE factory_rmStockIn_data\nSET remainingQty = CASE\n';
-
-                                                                data.forEach((item) => {
-                                                                    const { rmStockInId, remainingStock } = item;
-                                                                    query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${remainingStock},2)\n`;
-                                                                });
-
-                                                                query += '    ELSE remainingQty\nEND\n';
-
-                                                                const stockInIds = data.map((item) => `'${item.rmStockInId}'`).join(', ');
-                                                                query += `WHERE rmStockInId IN (${stockInIds})`;
-
-                                                                return query;
-                                                            }
-
-                                                            console.log(generateUpdateQuery(sopq))
-                                                            const sql_qurey_updatedRemainQty = `${generateUpdateQuery(sopq)};
-                                                                        DELETE FROM factory_stockOutwiseStockInId_data WHERE rmStockOutId = '${rmStockOutId}';
-                                                                        INSERT INTO factory_stockOutwiseStockInId_data (rmStockOutId, rmStockInId, cutRmQty) VALUES ${stockOutWiseStockInId}`;
-                                                            pool.query(sql_qurey_updatedRemainQty, (err, data) => {
-                                                                if (err) {
-                                                                    console.error("An error occurd in SQL Queery", err);
-                                                                    return res.status(500).send('Database Error');
-                                                                }
-                                                                const editFields = () => {
-                                                                    var string = ''
-                                                                    updatedField.forEach((data, index) => {
-                                                                        if (index == 0)
-                                                                            string = "(" + "'" + rmStockOutId + "'" + "," + "'" + userId + "'" + "," + "'" + rawMaterialId + "'" + "," + "'" + previousData[data] + "'" + "," + "'" + newData[data] + "'" + "," + "'" + reason + "'" + "," + "STR_TO_DATE('" + rmStockOutModificationDate + "','%b %d %Y %H:%i:%s')" + "," + "STR_TO_DATE('" + currentModifyDate + "','%b %d %Y %H:%i:%s')" + ")";
-                                                                        else
-                                                                            string = string + ",(" + "'" + rmStockOutId + "'" + "," + "'" + userId + "'" + "," + "'" + rawMaterialId + "'" + "," + "'" + previousData[data] + "'" + "," + "'" + newData[data] + "'" + "," + "'" + reason + "'" + "," + "STR_TO_DATE('" + rmStockOutModificationDate + "','%b %d %Y %H:%i:%s')" + "," + "STR_TO_DATE('" + currentModifyDate + "','%b %d %Y %H:%i:%s')" + ")";
-                                                                    });
-                                                                    return string;
-                                                                }
-
-                                                                console.log(">>>>>>>><<<<<<<<<", editFields());
-                                                                const sql_querry_addPreviousData = `INSERT INTO factory_rmModified_history  (
-                                                                                                rmStockOutId,
-                                                                                                userId,
-                                                                                                rawMaterialId,
-                                                                                                previous,
-                                                                                                updated,
-                                                                                                modifiedReason,
-                                                                                                previousDateTime,
-                                                                                                updatedDateTime
-                                                                                            )
-                                                                                            VALUES ${editFields()}`;
-                                                                console.log(">>.....", sql_querry_addPreviousData);
-                                                                pool.query(sql_querry_addPreviousData, (err, data) => {
-                                                                    if (err) {
-                                                                        console.error("An error occurd in SQL Queery", err);
-                                                                        return res.status(500).send('Database Error');
-                                                                    }
-                                                                    console.log(">?>?>?>?,,,", rmStockOutCategory);
-                                                                    const sql_querry_updatedetails = `UPDATE factory_rmStockOut_data SET
+                                                                const sql_querry_updatedetails = `UPDATE factory_rmStockOut_data SET
                                                                                          userId = '${userId}',
                                                                                          rawMaterialId = '${rawMaterialId}',
                                                                                          rawMaterialQty = ${productFinalQty},
@@ -1402,39 +1403,39 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                                                                       totalPrice = ${rmStockOutPrice},
                                                                                                       billNumber = ${billNumber ? `'${billNumber}'` : null},
                                                                                                       stockInDisplayQty = ${rawMaterialQty},
-                                                                                                      stockInDisplayUnit = '${rawMaterialUnit}'
+                                                                                                      stockInDisplayUnit = '${rawMaterialUnit}',
                                                                                                       supplierId = '${process.env.RAJ_MANDIR_FACTORY_ID}',
                                                                                                       stockInPaymentMethod = 'cash',
                                                                                                       stockInComment = ${rmStockOutComment ? `'${rmStockOutComment}'` : null},
                                                                                                       productExpiryDate = ${stockInneedData && stockInneedData.isExpired && stockInneedData.expiredDays > 0 ? `DATE_ADD(STR_TO_DATE('${rmStockOutDate}','%b %d %Y'), INTERVAL ${stockInneedData.expiredDays} DAY)` : null},
                                                                                                       remainingQty = ${StockInProductFinalQty},
                                                                                                       stockInDate = STR_TO_DATE('${rmStockOutDate}','%b %d %Y') 
-                                                                                                WHERE stockInId = '${rawMaterialId}'`;
-                                                                    pool.query(sql_querry_updatedetails, (err, data) => {
-                                                                        if (err) {
-                                                                            console.error("An error occurd in SQL Queery", err);
-                                                                            return res.status(500).send('Database Error');
-                                                                        }
-                                                                        return res.status(200).send("Transaction Updated Successfully");
-                                                                    })
+                                                                                                WHERE stockInId = '${rmStockOutId}'`;
+                                                                pool.query(sql_querry_updatedetails, (err, data) => {
+                                                                    if (err) {
+                                                                        console.error("An error occurd in SQL Queery", err);
+                                                                        return res.status(500).send('Database Error');
+                                                                    }
+                                                                    return res.status(200).send("Transaction Updated Successfully");
                                                                 })
                                                             })
                                                         })
-                                                    } else {
-                                                        console.log('333333333333', prevoiusQuantity, productFinalQty);
-                                                        const editFields = () => {
-                                                            var string = ''
-                                                            updatedField.forEach((data, index) => {
-                                                                if (index == 0)
-                                                                    string = "(" + "'" + rmStockOutId + "'" + "," + "'" + userId + "'" + "," + "'" + rawMaterialId + "'" + "," + "'" + previousData[data] + "'" + "," + "'" + newData[data] + "'" + "," + "'" + reason + "'" + "," + "STR_TO_DATE('" + rmStockOutModificationDate + "','%b %d %Y %H:%i:%s')" + "," + "STR_TO_DATE('" + currentModifyDate + "','%b %d %Y %H:%i:%s')" + ")";
-                                                                else
-                                                                    string = string + ",(" + "'" + rmStockOutId + "'" + "," + "'" + userId + "'" + "," + "'" + rawMaterialId + "'" + "," + "'" + previousData[data] + "'" + "," + "'" + newData[data] + "'" + "," + "'" + reason + "'" + "," + "STR_TO_DATE('" + rmStockOutModificationDate + "','%b %d %Y %H:%i:%s')" + "," + "STR_TO_DATE('" + currentModifyDate + "','%b %d %Y %H:%i:%s')" + ")";
-                                                            });
-                                                            return string;
-                                                        }
+                                                    })
+                                                } else {
+                                                    console.log('333333333333', prevoiusQuantity, productFinalQty);
+                                                    const editFields = () => {
+                                                        var string = ''
+                                                        updatedField.forEach((data, index) => {
+                                                            if (index == 0)
+                                                                string = "(" + "'" + rmStockOutId + "'" + "," + "'" + userId + "'" + "," + "'" + rawMaterialId + "'" + "," + "'" + previousData[data] + "'" + "," + "'" + newData[data] + "'" + "," + "'" + reason + "'" + "," + "STR_TO_DATE('" + rmStockOutModificationDate + "','%b %d %Y %H:%i:%s')" + "," + "STR_TO_DATE('" + currentModifyDate + "','%b %d %Y %H:%i:%s')" + ")";
+                                                            else
+                                                                string = string + ",(" + "'" + rmStockOutId + "'" + "," + "'" + userId + "'" + "," + "'" + rawMaterialId + "'" + "," + "'" + previousData[data] + "'" + "," + "'" + newData[data] + "'" + "," + "'" + reason + "'" + "," + "STR_TO_DATE('" + rmStockOutModificationDate + "','%b %d %Y %H:%i:%s')" + "," + "STR_TO_DATE('" + currentModifyDate + "','%b %d %Y %H:%i:%s')" + ")";
+                                                        });
+                                                        return string;
+                                                    }
 
-                                                        console.log(">>>>>>>><<<<<<<<<", editFields());
-                                                        const sql_querry_addPreviousData = `INSERT INTO factory_rmModified_history  (
+                                                    console.log(">>>>>>>><<<<<<<<<", editFields());
+                                                    const sql_querry_addPreviousData = `INSERT INTO factory_rmModified_history  (
                                                                                                 rmStockOutId,
                                                                                                 userId,
                                                                                                 rawMaterialId,
@@ -1445,14 +1446,14 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                                                                 updatedDateTime
                                                                                             )
                                                                                             VALUES ${editFields()}`;
-                                                        console.log(">>.....", sql_querry_addPreviousData);
-                                                        pool.query(sql_querry_addPreviousData, (err, data) => {
-                                                            if (err) {
-                                                                console.error("An error occurd in SQL Queery", err);
-                                                                return res.status(500).send('Database Error');
-                                                            }
-                                                            console.log(">?>?>?>?,,,", rmStockOutCategory);
-                                                            const sql_querry_updatedetails = `UPDATE factory_rmStockOut_data SET 
+                                                    console.log(">>.....", sql_querry_addPreviousData);
+                                                    pool.query(sql_querry_addPreviousData, (err, data) => {
+                                                        if (err) {
+                                                            console.error("An error occurd in SQL Queery", err);
+                                                            return res.status(500).send('Database Error');
+                                                        }
+                                                        console.log("Avyuuuuuuu", branchId);
+                                                        const sql_querry_updatedetails = `UPDATE factory_rmStockOut_data SET 
                                                                                                       userId = '${userId}',
                                                                                                       rawMaterialId = '${rawMaterialId}',
                                                                                                       rawMaterialQty = ${productFinalQty},
@@ -1467,31 +1468,28 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                                                                       userId = '${userId}',
                                                                                                       productId = '${rawMaterialId}',
                                                                                                       productQty = ${StockInProductFinalQty},
-                                                                                                      productPrice = ${rmStockOutPrice / StockInProductFinalQty},
-                                                                                                      totalPrice = ${rmStockOutPrice},
                                                                                                       billNumber = ${billNumber ? `'${billNumber}'` : null},
                                                                                                       stockInDisplayQty = ${rawMaterialQty},
-                                                                                                      stockInDisplayUnit = '${rawMaterialUnit}'
+                                                                                                      stockInDisplayUnit = '${rawMaterialUnit}',
                                                                                                       supplierId = '${process.env.RAJ_MANDIR_FACTORY_ID}',
                                                                                                       stockInPaymentMethod = 'cash',
                                                                                                       stockInComment = ${rmStockOutComment ? `'${rmStockOutComment}'` : null},
                                                                                                       productExpiryDate = ${stockInneedData && stockInneedData.isExpired && stockInneedData.expiredDays > 0 ? `DATE_ADD(STR_TO_DATE('${rmStockOutDate}','%b %d %Y'), INTERVAL ${stockInneedData.expiredDays} DAY)` : null},
                                                                                                       remainingQty = ${StockInProductFinalQty},
                                                                                                       stockInDate = STR_TO_DATE('${rmStockOutDate}','%b %d %Y') 
-                                                                                                WHERE stockInId = '${rawMaterialId}'`;
-                                                            pool.query(sql_querry_updatedetails, (err, data) => {
-                                                                if (err) {
-                                                                    console.error("An error occurd in SQL Queery", err);
-                                                                    return res.status(500).send('Database Error');
-                                                                }
-                                                                return res.status(200).send("Transaction Updated Successfully");
-                                                            })
+                                                                                                WHERE stockInId = '${rmStockOutId}'`;
+                                                        pool.query(sql_querry_updatedetails, (err, data) => {
+                                                            if (err) {
+                                                                console.error("An error occurd in SQL Queery", err);
+                                                                return res.status(500).send('Database Error');
+                                                            }
+                                                            return res.status(200).send("Transaction Updated Successfully");
                                                         })
-                                                    }
-                                                })
+                                                    })
+                                                }
                                             })
-                                        }
-                                    })
+                                        })
+                                    }
                                 })
                             })
                         })
@@ -1583,23 +1581,13 @@ const updateRmStockOutTransaction = async (req, res) => {
                                             return key;
                                         }
                                     })
-                                    // if (updatedField.includes('rawMaterialQty')) {
-                                    //     previousData.rawMaterialQty = previousData.rawMaterialQty + ' ' + previousData.rawMaterialUnit;
-                                    //     newData.rawMaterialQty = newData.rawMaterialQty + ' ' + rawMaterialUnit;
-                                    //     console.log('chavda', newData);
-                                    // }
-                                    // else if (updatedField.includes('rawMaterialUnit')) {
-                                    //     previousData.rawMaterialUnit = previousData.rawMaterialQty + ' ' + previousData.rawMaterialUnit;
-                                    //     newData.rawMaterialUnit = newData.rawMaterialQty + ' ' + rawMaterialUnit;
-                                    //     console.log('chavda else', newData);
-                                    // }
-                                    // console.log('parmar out', newData);
+
                                     if (updatedField == null || updatedField == '') {
                                         return res.status(500).send('No Change');
                                     }
 
                                     sql_querry_getStockIndetail = `SELECT rmStockInId, rawMaterialId, rawMaterialQty, rawMaterialPrice AS stockInPrice, remainingQty AS stockInQuantity FROM factory_rmStockIn_data WHERE factory_rmStockIn_data.rawMaterialId = '${rawMaterialId}' AND factory_rmStockIn_data.remainingQty != 0 ORDER BY rmStockInDate ASC;
-                                                           SELECT rmStockInId FROM factory_stockOutwiseStockInId_data WHERE rmStockOutId = '${rmStockOutId}'`;
+                                                                   SELECT rmStockInId FROM factory_stockOutwiseStockInId_data WHERE rmStockOutId = '${rmStockOutId}'`;
                                     pool.query(sql_querry_getStockIndetail, (err, data) => {
                                         if (err) {
                                             console.error("An error occurd in SQL Queery", err);

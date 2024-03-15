@@ -60,11 +60,9 @@ function conversation(qty, id, unit, callback) {
             return callback('Database Error', null);
         }
         let unitJson = Object.values(JSON.parse(JSON.stringify(data)));
-        console.log('jo to', unitJson);
         if (unitJson.length != 0) {
             let conversationFactor = computeConversionFactors(unitJson);
             let transformedArray = conversationFactor.map(item => {
-                console.log('errir>>', (Number(qty / item.value).toFixed(4)), parseInt(Number(qty / item.value)), (Number(qty / item.value).toFixed(4)) % parseInt(Number(qty / item.value)), (Number(qty / item.value).toFixed(4)), parseInt(Number(qty / item.value)))
                 return { unitName: item.unitName, value: parseInt(Number(qty / item.value)) == 0 && Number(qty / item.value) > 0 ? (Number(qty / item.value).toFixed(4)) : (Number(qty / item.value).toFixed(4)) % parseInt(Number(qty / item.value)) > 0 ? (Number(qty / item.value).toFixed(4)) : parseInt(Number(qty / item.value)) };
             });
             let convertedQuantity = convertQuantity(qty, unitJson);
@@ -102,7 +100,6 @@ async function processDatas(datas) {
     for (const e of datas) {
         try {
             const newJson = await conversationAsync(e.remainingStock, e.productId, e.minProductUnit);
-            console.log('Jo Lodi', newJson);
             updatedDatas.push(newJson);
         } catch (error) {
             // Handle errors here

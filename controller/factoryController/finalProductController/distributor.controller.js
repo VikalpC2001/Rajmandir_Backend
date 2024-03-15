@@ -201,6 +201,81 @@ const getFactoryDistributorDetailsById = async (req, res) => {
 
 // Add Distributor API
 
+// const addDistributorDetails = async (req, res) => {
+//     try {
+//         pool.beginTransaction();
+
+//         const uid1 = new Date();
+//         const distributorId = String("distributor_" + uid1.getTime());
+//         console.log("...", distributorId.toString());
+
+//         const data = {
+//             distributorFirstName: req.body.distributorFirstName ? req.body.distributorFirstName.trim() : null,
+//             distributorLastName: req.body.distributorLastName ? req.body.distributorLastName.trim() : null,
+//             distributorFirmName: req.body.distributorFirmName.trim(),
+//             distributorFirmAddress: req.body.distributorFirmAddress ? req.body.distributorFirmAddress.trim() : null,
+//             distributorNickName: req.body.distributorNickName.trim(),
+//             distributorPhoneNumber: req.body.distributorPhoneNumber.trim(),
+//             distributorEmailId: req.body.distributorEmailId ? req.body.distributorEmailId.trim() : null,
+//             mfProductId: req.body.mfProductId ? req.body.mfProductId : null
+//         }
+
+//         const distributorProducts = () => {
+//             if (data.mfProductId == null || data.mfProductId == '') {
+//                 return res.status(400).send("Please Select Product");
+//             } else {
+//                 var string = ''
+//                 data.mfProductId.forEach((data, index) => {
+//                     if (index == 0)
+//                         string = "(" + "'" + distributorId + "'" + "," + string + "'" + data + "'" + ")";
+//                     else
+//                         string = string + ",(" + "'" + distributorId + "'" + "," + "'" + data + "'" + ")";
+//                 });
+//                 return string;
+//             }
+//         }
+
+//         if (!data.distributorNickName || !data.distributorFirmName || !data.distributorPhoneNumber || !data.mfProductId) {
+//             return res.status(400).send("Please Fill all the fields");
+//         } else {
+//             const existingDistributor = await connection.query(`SELECT distributorNickName FROM factory_distributor_data WHERE distributorNickName = ?`, [data.distributorNickName]);
+
+//             if (existingDistributor && existingDistributor.length) {
+//                 await pool.rollback();
+//                 return res.status(400).send('Distributor is Already In Use');
+//             }
+
+//             const sql_querry_addDistributor = `INSERT INTO factory_distributor_data (distributorId, distributorFirstName, distributorLastName, distributorFirmName, distributorFirmAddress, distributorNickName, distributorPhoneNumber, distributorEmailId)
+//                                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+
+//             const addDistributorResult = await pool.query(sql_querry_addDistributor, [
+//                 distributorId,
+//                 data.distributorFirstName,
+//                 data.distributorLastName,
+//                 data.distributorFirmName,
+//                 data.distributorFirmAddress,
+//                 data.distributorNickName,
+//                 data.distributorPhoneNumber,
+//                 data.distributorEmailId
+//             ]);
+
+//             const sql_queries_addsupllierProducts = `INSERT INTO factory_distributorProducts_data (distributorId, mfProductId) VALUES ${distributorProducts()}`;
+
+//             const addProductsResult = await pool.query(sql_queries_addsupllierProducts);
+
+//             await pool.commit();
+//             return res.status(200).send("Distributor Added Successfully");
+//         }
+//     } catch (error) {
+//         await connection.rollback();
+//         console.error('An error occurred', error);
+//         res.status(500).send('Internal Server Error');
+//     } finally {
+//         connection.release();
+//     }
+// }
+
+
 const addDistributorDetails = async (req, res) => {
     try {
 
@@ -271,27 +346,38 @@ const addDistributorDetails = async (req, res) => {
 // Remove Distributor API
 
 const removeDistributorDetails = async (req, res) => {
-
     try {
-        const distributorId = req.query.distributorId
-        req.query.userId = pool.query(`SELECT distributorId FROM factory_distributor_data WHERE distributorId = '${distributorId}'`, (err, row) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM factory_distributor_data WHERE distributorId = '${distributorId}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                const distributorId = req.query.distributorId
+                req.query.userId = pool.query(`SELECT distributorId FROM factory_distributor_data WHERE distributorId = '${distributorId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send("distributorId Deleted Successfully");
+                    if (row && row.length) {
+                        const sql_querry_removedetails = `DELETE FROM factory_distributor_data WHERE distributorId = '${distributorId}'`;
+                        pool.query(sql_querry_removedetails, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');
+                            }
+                            return res.status(200).send("distributorId Deleted Successfully");
+                        })
+                    } else {
+                        return res.send('distributorId Not Found');
+                    }
                 })
             } else {
-                return res.send('distributorId Not Found');
+                return res.status(400).send('You are Not Authorised');
             }
-        })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');
@@ -519,8 +605,6 @@ const getAllProductDetailsByDistributorId = async (req, res) => {
                                 const datas = Object.values(JSON.parse(JSON.stringify(rows)));
                                 processDatas(datas)
                                     .then((data) => {
-                                        console.log('json 1', datas);
-                                        console.log('json 2', data);
                                         const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minMfProductUnit },
                                             // console.log(data[index] && data[index].convertedQuantity)
                                         ) : []

@@ -1,5 +1,8 @@
 const pool = require('../../../database');
 const jwt = require("jsonwebtoken");
+const excelJS = require("exceljs");
+const { jsPDF } = require('jspdf');
+require('jspdf-autotable');
 
 // Get Transaction List API
 
@@ -238,7 +241,7 @@ const addFacttoryDistributorTransactionDetails = async (req, res) => {
     try {
 
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userId = decoded.id.id;
@@ -342,7 +345,7 @@ const removeFactoryDistributorTransactionDetails = async (req, res) => {
 const updateFactoryDistributorTransactionDetails = async (req, res) => {
     try {
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userId = decoded.id.id;
@@ -542,6 +545,527 @@ const getDistributorCashAndDebit = (req, res) => {
         res.status(500).send('Internal Server Error');
     }
 }
+
+// Export Excel Data
+
+const exportExcelForDistributorCashAndDebit = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const departmentId = decoded.id.categoryId ? decoded.id.categoryId : null;
+            if (departmentId) {
+                const data = {
+                    startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                    endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                    payType: req.query.payType,
+                    distributorId: req.query.distributorId
+                }
+                const sql_common_qurey = `SELECT
+                                              fdwod.outDataId,
+                                              user_details.userName AS enteredBy,
+                                              CONCAT(
+                                                  user_details.userFirstName,
+                                                  ' ',
+                                                  user_details.userLastName
+                                              ) AS userName,
+                                              fdwod.mfProductId,
+                                              fmpd.mfProductName,
+                                              CONCAT(mfso.mfStockOutDisplayQty,' ',mfso.mfStockOutDisplayUnit) AS qty,
+                                              mfso.mfProductOutPrice AS costPrice,
+                                              fdwod.payType,
+                                              fdwod.sellAmount,
+                                              DATE_FORMAT(fdwod.sellDate,'%d-%M-%Y') AS sellDate,
+                                              DATE_FORMAT(outDataCreationDate,'%h:%i %p') AS sellTime
+                                          FROM
+                                              factory_distributorWiseOut_data AS fdwod
+                                          INNER JOIN user_details ON user_details.userId = fdwod.userId
+                                          INNER JOIN factory_mfProductStockOut_data AS mfso ON mfso.mfStockOutId = fdwod.mfStockOutId
+                                          INNER JOIN factory_manufactureProduct_data AS fmpd ON fmpd.mfProductId = fdwod.mfProductId`;
+
+                if (req.query.startDate && req.query.endDate && req.query.payType && req.query.distributorId) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE distributorId = '${data.distributorId}' AND payType = '${data.payType}' AND sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else if (req.query.startDate && req.query.endDate && req.query.distributorId) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE distributorId = '${data.distributorId}' AND sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else if (req.query.startDate && req.query.endDate && req.query.payType) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE payType = '${data.payType}' AND sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else if (req.query.startDate && req.query.endDate) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else if (req.query.distributorId && req.query.payType) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE distributorId = '${data.distributorId}' AND payType = '${data.payType}' AND sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND sellDate <= CURDATE()
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else if (req.query.payType) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE payType = '${data.payType}' AND sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND sellDate <= CURDATE()
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE distributorId = '${data.distributorId}' AND sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND sellDate <= CURDATE()
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                }
+                pool.query(sql_query_getDetails, async (err, rows) => {
+                    if (err) {
+                        console.error("An error occurd in SQL Queery", err);
+                        return res.status(500).send('Database Error');;
+                    } else {
+                        if (rows.length == 0) {
+                            return res.status(200).send('No Data Found');
+                        } else {
+                            const workbook = new excelJS.Workbook();  // Create a new workbook
+                            const worksheet = workbook.addWorksheet("Transaction List"); // New Worksheet
+
+                            worksheet.mergeCells('A1', 'I1');
+                            worksheet.getCell('A1').value = `Transaction List`
+
+                            /*Column headers*/
+                            worksheet.getRow(2).values = ['S no.', 'Entered By', 'Product', 'Quantity', 'Cost', 'Pay Type', 'Sell Price', 'Date', "Time"];
+
+                            // Column for data in excel. key must match data key
+                            worksheet.columns = [
+                                { key: "s_no", width: 10, },
+                                { key: "enterBy", width: 20 },
+                                { key: "mfProductName", width: 30 },
+                                { key: "qty", width: 20 },
+                                { key: "costPrice", width: 10 },
+                                { key: "payType", width: 10 },
+                                { key: "sellAmount", width: 30 },
+                                { key: "sellDate", width: 20 },
+                                { key: "sellTime", width: 20 },
+                            ];
+                            //Looping through User data
+                            const arr = rows
+                            let counter = 1;
+                            arr.forEach((user, index) => {
+                                user.s_no = counter;
+                                const row = worksheet.addRow(user); // Add data in worksheet
+                                counter++;
+                            });
+                            // Making first line in excel bold
+                            worksheet.getRow(1).eachCell((cell) => {
+                                cell.font = { bold: true, size: 13 }
+                                cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                height = 200
+                            });
+                            worksheet.getRow(2).eachCell((cell) => {
+                                cell.font = { bold: true, size: 13 }
+                                cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                            });
+                            worksheet.getRow(1).height = 30;
+                            worksheet.getRow(2).height = 20;
+                            worksheet.getRow(arr.length + 3).values = ['Total:', '', '', '', { formula: `SUM(E3:E${arr.length + 2})` }, '', { formula: `SUM(G3:G${arr.length + 2})` }];
+
+                            worksheet.getRow(arr.length + 3).eachCell((cell) => {
+                                cell.font = { bold: true, size: 14 }
+                                cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                            })
+                            worksheet.eachRow((row) => {
+                                row.eachCell((cell) => {
+                                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                                    row.height = 20
+                                });
+                            });
+                            try {
+                                const data = await workbook.xlsx.writeBuffer()
+                                res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                res.type = 'blob';
+                                res.send(data)
+                            } catch (err) {
+                                throw new Error(err);
+                            }
+                        }
+                    }
+                })
+            } else {
+                return res.status(404).send('DepartmentId Not Found');
+            }
+        } else {
+            return res.status(401).send('Pleasr Login Firest.....!');
+        }
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
+const exportExcelForDistributorDebitTransactionList = async (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+            var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+            var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+            const data = {
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                distributorId: req.query.distributorId,
+            }
+            const sql_common_qurey = `SELECT 
+                                        distributorTransactionId,
+                                        RIGHT(distributorTransactionId,9) AS invoiceNumber, 
+                                        CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS paidBy, 
+                                        factory_distributor_data.distributorNickName, 
+                                        receivedBy, 
+                                        pendingAmount, 
+                                        paidAmount, 
+                                        transactionNote, 
+                                        DATE_FORMAT(transactionDate,'%d-%M-%Y') AS transactionDate, 
+                                        DATE_FORMAT(distributorTransactionCreationDate,'%h:%i %p') AS transactionTime 
+                                      FROM factory_distributorTransaction_data
+                                      LEFT JOIN user_details ON user_details.userId = factory_distributorTransaction_data.UserId
+                                      LEFT JOIN factory_distributor_data ON factory_distributor_data.distributorId = factory_distributorTransaction_data.distributorId`;
+            if (req.query.distributorId && req.query.startDate && req.query.endDate) {
+                sql_queries_getdetails = `${sql_common_qurey}
+                                            WHERE factory_distributorTransaction_data.distributorId = '${data.distributorId}' AND factory_distributorTransaction_data.transactionDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y') 
+                                            ORDER BY factory_distributorTransaction_data.transactionDate ,factory_distributorTransaction_data.distributorTransactionCreationDate DESC`;
+            } else if (req.query.startDate && req.query.endDate) {
+                sql_queries_getdetails = `${sql_common_qurey}
+                                            WHERE factory_distributorTransaction_data.transactionDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y') 
+                                            ORDER BY factory_distributorTransaction_data.transactionDate, factory_distributorTransaction_data.distributorTransactionCreationDate DESC`;
+            } else if (req.query.distributorId) {
+                sql_queries_getdetails = `${sql_common_qurey}
+                                            WHERE factory_distributorTransaction_data.distributorId = '${data.distributorId}' AND factory_distributorTransaction_data.transactionDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                            ORDER BY factory_distributorTransaction_data.transactionDate, factory_distributorTransaction_data.distributorTransactionCreationDate DESC`;
+            } else {
+                sql_queries_getdetails = `${sql_common_qurey}
+                                            WHERE factory_distributorTransaction_data.transactionDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                            ORDER BY factory_distributorTransaction_data.transactionDate, factory_distributorTransaction_data.distributorTransactionCreationDate DESC`;
+            }
+            pool.query(sql_queries_getdetails, async (err, rows, fields) => {
+                if (err) {
+                    console.error("An error occurd in SQL Queery", err);
+                    return res.status(500).send('Database Error');;
+                } else {
+                    if (rows.length === 0) {
+                        return res.status(400).send('No Data Found');
+                    } else {
+                        const workbook = new excelJS.Workbook();  // Create a new workbook
+                        const worksheet = workbook.addWorksheet("Transaction List"); // New Worksheet
+
+                        worksheet.mergeCells('A1', 'I1');
+                        worksheet.getCell('A1').value = `Transaction List`
+
+                        /*Column headers*/
+                        worksheet.getRow(2).values = ['S no.', 'Invoice Number', 'Received By', 'Paid By', 'Pending Amount', 'Paid Amount', 'Transaction Note', 'Date', 'Time'];
+
+                        // Column for data in excel. key must match data key
+                        worksheet.columns = [
+                            { key: "s_no", width: 10, },
+                            { key: "invoiceNumber", width: 20 },
+                            { key: "paidBy", width: 30 },
+                            { key: "distributorNickName", width: 20 },
+                            { key: "pendingAmount", width: 10 },
+                            { key: "paidAmount", width: 10 },
+                            { key: "transactionNote", width: 30 },
+                            { key: "transactionDate", width: 20 },
+                            { key: "transactionTime", width: 20 },
+                        ];
+                        //Looping through User data
+                        const arr = rows
+                        let counter = 1;
+                        arr.forEach((user, index) => {
+                            user.s_no = counter;
+                            const row = worksheet.addRow(user); // Add data in worksheet
+                            counter++;
+                        });
+                        // Making first line in excel bold
+                        worksheet.getRow(1).eachCell((cell) => {
+                            cell.font = { bold: true, size: 13 }
+                            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                            height = 200
+                        });
+                        worksheet.getRow(2).eachCell((cell) => {
+                            cell.font = { bold: true, size: 13 }
+                            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                        });
+                        worksheet.getRow(1).height = 30;
+                        worksheet.getRow(2).height = 20;
+                        worksheet.getRow(arr.length + 3).values = ['Total:', '', '', '', '', { formula: `SUM(F3:F${arr.length + 2})` }];
+
+                        worksheet.getRow(arr.length + 3).eachCell((cell) => {
+                            cell.font = { bold: true, size: 14 }
+                            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                        })
+                        worksheet.eachRow((row) => {
+                            row.eachCell((cell) => {
+                                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                                row.height = 20
+                            });
+                        });
+                        try {
+                            const data = await workbook.xlsx.writeBuffer()
+                            res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                            res.type = 'blob';
+                            res.send(data)
+                        } catch (err) {
+                            throw new Error(err);
+                        }
+                    }
+                }
+            })
+        } else {
+            return res.status(401).send('Pleasr Login Firest.....!');
+        }
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Export PDF Common Function
+
+async function createPDF(res, datas, sumFooterArray, tableHeading) {
+    try {
+        // Create a new PDF document
+        console.log(';;;;;;', datas);
+        console.log('?????', sumFooterArray);
+        console.log('?????', tableHeading);
+        const doc = new jsPDF();
+
+        // JSON data
+        const jsonData = datas;
+        // console.log(jsonData);
+
+        // Get the keys from the first JSON object to set as columns
+        const keys = Object.keys(jsonData[0]);
+
+        // Define columns for the auto table, including a "Serial No." column
+        const columns = [
+            { header: 'Sr.', dataKey: 'serialNo' }, // Add Serial No. column
+            ...keys.map(key => ({ header: key, dataKey: key }))
+        ]
+
+        // Convert JSON data to an array of arrays (table rows) and add a serial number
+        const data = jsonData.map((item, index) => [index + 1, ...keys.map(key => item[key]), '', '']);
+
+        // Initialize the sum columns with empty strings
+        if (sumFooterArray) {
+            data.push(sumFooterArray);
+        }
+
+        // Add auto table to the PDF document
+        doc.text(15, 15, tableHeading);
+        doc.autoTable({
+            startY: 20,
+            head: [columns.map(col => col.header)], // Extract headers correctly
+            body: data,
+            theme: 'grid',
+            styles: {
+                cellPadding: 2, // Add padding to cells for better appearance
+                halign: 'center', // Horizontally center-align content
+                fontSize: 10
+            },
+        });
+
+        const pdfBytes = await doc.output();
+        const fileName = 'jane-doe.pdf'; // Set the desired file name
+
+        // Set the response headers for the PDF download
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Type', 'application/pdf');
+
+        // Stream the PDF to the client for download
+        res.send(pdfBytes);
+
+
+        // Save the PDF to a file
+        // const pdfFilename = 'output.pdf';
+        // fs.writeFileSync(pdfFilename, doc.output());
+        // console.log(`PDF saved as ${pdfFilename}`);
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Export PDF Data
+
+const exportPdfForDistributorCashAndDebit = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const departmentId = decoded.id.categoryId ? decoded.id.categoryId : null;
+            if (departmentId) {
+                const data = {
+                    startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                    endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                    payType: req.query.payType,
+                    distributorId: req.query.distributorId
+                }
+                const sql_common_qurey = `SELECT
+                                              user_details.userName AS "Enter By",
+                                              fmpd.mfProductName AS "Product Name",
+                                              CONCAT(mfso.mfStockOutDisplayQty,' ',mfso.mfStockOutDisplayUnit) AS "Qty",
+                                              mfso.mfProductOutPrice AS "Cost",
+                                              fdwod.payType AS "Pay Type",
+                                              fdwod.sellAmount AS "Sell Amount",
+                                              DATE_FORMAT(fdwod.sellDate,'%d-%M-%Y') AS "Date",
+                                              DATE_FORMAT(outDataCreationDate,'%h:%i %p') AS "Time"
+                                          FROM
+                                              factory_distributorWiseOut_data AS fdwod
+                                          INNER JOIN user_details ON user_details.userId = fdwod.userId
+                                          INNER JOIN factory_mfProductStockOut_data AS mfso ON mfso.mfStockOutId = fdwod.mfStockOutId
+                                          INNER JOIN factory_manufactureProduct_data AS fmpd ON fmpd.mfProductId = fdwod.mfProductId`;
+
+                if (req.query.startDate && req.query.endDate && req.query.payType && req.query.distributorId) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE distributorId = '${data.distributorId}' AND payType = '${data.payType}' AND sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else if (req.query.startDate && req.query.endDate && req.query.distributorId) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE distributorId = '${data.distributorId}' AND sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else if (req.query.startDate && req.query.endDate && req.query.payType) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE payType = '${data.payType}' AND sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else if (req.query.startDate && req.query.endDate) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else if (req.query.distributorId && req.query.payType) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE distributorId = '${data.distributorId}' AND payType = '${data.payType}' AND sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND sellDate <= CURDATE()
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else if (req.query.payType) {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE payType = '${data.payType}' AND sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND sellDate <= CURDATE()
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                } else {
+                    sql_query_getDetails = `${sql_common_qurey}
+                                                WHERE distributorId = '${data.distributorId}' AND sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND sellDate <= CURDATE()
+                                                ORDER BY sellDate DESC, outDataCreationDate DESC`;
+                }
+                pool.query(sql_query_getDetails, async (err, rows) => {
+                    if (err) {
+                        console.error("An error occurd in SQL Queery", err);
+                        return res.status(500).send('Database Error');;
+                    } else {
+                        if (rows && rows.length <= 0) {
+                            return res.status(200).send('No Data Found');
+                        } else {
+                            const abc = Object.values(JSON.parse(JSON.stringify(rows)));
+                            const cost = abc.reduce((total, item) => total + (item['Cost'] || 0), 0);;
+                            const sell = abc.reduce((total, item) => total + (item['Sell Amount'] || 0), 0);;
+                            const sumFooterArray = ['Total', '', '', '', parseFloat(cost).toLocaleString('en-IN'), '', parseFloat(sell).toLocaleString('en-IN')];
+
+                            let tableHeading = `Transaction List`;
+
+                            createPDF(res, abc, sumFooterArray, tableHeading)
+                                .then(() => {
+                                    console.log('PDF created successfully');
+                                    res.status(200);
+                                })
+                                .catch((err) => {
+                                    console.log(err);
+                                    res.status(500).send('Error creating PDF');
+                                });
+                        }
+                    }
+                })
+            } else {
+                return res.status(404).send('DepartmentId Not Found');
+            }
+        } else {
+            return res.status(401).send('Pleasr Login Firest.....!');
+        }
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
+const exportPdfForDistributorDebitTransactionList = async (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+            var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+            var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+            const data = {
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                distributorId: req.query.distributorId,
+            }
+            const sql_common_qurey = `SELECT 
+                                        RIGHT(distributorTransactionId,9) AS "Invoice Number", 
+                                        CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS "Received By", 
+                                        factory_distributor_data.distributorNickName AS "Paid By",   
+                                        pendingAmount AS "Pending Amount", 
+                                        paidAmount AS "Paid Amount", 
+                                        transactionNote AS "Note", 
+                                        DATE_FORMAT(transactionDate,'%d-%M-%Y') AS "Date", 
+                                        DATE_FORMAT(distributorTransactionCreationDate,'%h:%i %p') AS "Time" 
+                                      FROM factory_distributorTransaction_data
+                                      LEFT JOIN user_details ON user_details.userId = factory_distributorTransaction_data.UserId
+                                      LEFT JOIN factory_distributor_data ON factory_distributor_data.distributorId = factory_distributorTransaction_data.distributorId`;
+            if (req.query.distributorId && req.query.startDate && req.query.endDate) {
+                sql_queries_getdetails = `${sql_common_qurey}
+                                            WHERE factory_distributorTransaction_data.distributorId = '${data.distributorId}' AND factory_distributorTransaction_data.transactionDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y') 
+                                            ORDER BY factory_distributorTransaction_data.transactionDate ,factory_distributorTransaction_data.distributorTransactionCreationDate DESC`;
+            } else if (req.query.startDate && req.query.endDate) {
+                sql_queries_getdetails = `${sql_common_qurey}
+                                            WHERE factory_distributorTransaction_data.transactionDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y') 
+                                            ORDER BY factory_distributorTransaction_data.transactionDate, factory_distributorTransaction_data.distributorTransactionCreationDate DESC`;
+            } else if (req.query.distributorId) {
+                sql_queries_getdetails = `${sql_common_qurey}
+                                            WHERE factory_distributorTransaction_data.distributorId = '${data.distributorId}' AND factory_distributorTransaction_data.transactionDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                            ORDER BY factory_distributorTransaction_data.transactionDate, factory_distributorTransaction_data.distributorTransactionCreationDate DESC`;
+            } else {
+                sql_queries_getdetails = `${sql_common_qurey}
+                                            WHERE factory_distributorTransaction_data.transactionDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                            ORDER BY factory_distributorTransaction_data.transactionDate, factory_distributorTransaction_data.distributorTransactionCreationDate DESC`;
+            }
+            pool.query(sql_queries_getdetails, async (err, rows, fields) => {
+                if (err) {
+                    console.error("An error occurd in SQL Queery", err);
+                    return res.status(500).send('Database Error');;
+                } else {
+                    if (rows.length === 0) {
+                        return res.status(400).send('No Data Found');
+                    } else {
+                        const abc = Object.values(JSON.parse(JSON.stringify(rows)));
+                        const paid = abc.reduce((total, item) => total + (item['Paid Amount'] || 0), 0);;
+                        const sumFooterArray = ['Total', '', '', '', '', parseFloat(paid).toLocaleString('en-IN')];
+
+                        let tableHeading = `Transaction List`;
+
+                        createPDF(res, abc, sumFooterArray, tableHeading)
+                            .then(() => {
+                                console.log('PDF created successfully');
+                                res.status(200);
+                            })
+                            .catch((err) => {
+                                console.log(err);
+                                res.status(500).send('Error creating PDF');
+                            });
+                    }
+                }
+            })
+        } else {
+            return res.status(401).send('Pleasr Login Firest.....!');
+        }
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
 
 module.exports = {
     getdistributorDebitTransactionList,

@@ -139,7 +139,6 @@ const addRmStockOutDetailsAuto = (data) => {
 
                                 // Desired quantity
                                 const desiredQuantity = stockOutData[0].stockOutQuantity;
-                                console.log("joiii looo ?????", desiredQuantity);
 
                                 // Calculate total stock out price
                                 let remainingQuantity = desiredQuantity;

@@ -121,7 +121,6 @@ const getRowMaterialCountDetailsById = (req, res) => {
                     ]
                     processDatas(datas)
                         .then((data) => {
-                            console.log('json 2', data);
                             // const convertedQuantities = data.map(item => ({ convertedQuantity: item.convertedQuantity }));
                             const convertedQuantities = data.map((item, index) => {
                                 let keyName;
@@ -135,9 +134,6 @@ const getRowMaterialCountDetailsById = (req, res) => {
 
                                 return { [keyName]: item.convertedQuantity };
                             });
-                            console.log(convertedQuantities);
-
-
                             let totalRs = results[0][0].totalRs;
                             let totalUsedPrice = results[1][0].totalUsedPrice;
                             let remainUsedPrice = results[2][0].remainingStock != 0 ? results[2][0].remainPrice : 0;
@@ -181,9 +177,6 @@ const getSupplierByRawMaterialId = (req, res) => {
             var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
             var firstDay = new Date(y, m, 1).toString().slice(4, 15);
             var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
-
-            console.log("1111>>>>", firstDay);
-            console.log("1111>>>>", lastDay);
 
             const data = {
                 startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
@@ -263,10 +256,7 @@ const getSupplierByRawMaterialId = (req, res) => {
                 const datas = Object.values(JSON.parse(JSON.stringify(result)));
                 processDatas(datas)
                     .then((data) => {
-                        console.log('json 1', datas);
-                        console.log('json 2', data);
                         const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minRawMaterialUnit },
-                            // console.log(data[index] && data[index].convertedQuantity)
                         ) : []
                         return res.status(200).send(rows);
                     }).catch(error => {
@@ -501,11 +491,11 @@ const addRawMaterial = async (req, res) => {
             minRawMaterialQty: req.body.minRawMaterialQty,
             minRawMaterialUnit: req.body.minRawMaterialUnit.trim(),
             leadTime: req.body.leadTime ? req.body.leadTime : 0,
+            isQtyNum: req.body.isQtyNum ? req.body.isQtyNum : false,
             isExpired: req.body.isExpired ? req.body.isExpired : false,
             expiredDays: req.body.expiredDays ? req.body.expiredDays : 0,
             isSupplayBranch: req.body.isSupplayBranch ? req.body.isSupplayBranch : false
         }
-        console.log(">>?>?>?>", data.rawMaterialName);
         if (!data.rawMaterialName || !data.rawMaterialCategoryId || !data.minRawMaterialQty || !data.minRawMaterialUnit) {
             return res.status(400).send("Please Fill All The Fields");
         } else {
@@ -517,8 +507,8 @@ const addRawMaterial = async (req, res) => {
                 if (row && row.length) {
                     return res.status(400).send('Raw Material is Already In Use');
                 } else {
-                    const sql_querry_addUser = `INSERT INTO factory_rawMaterial_data(rawMaterialId, rawMaterialCategoryId, rawMaterialName, gujaratiRawMaterialName, minRawMaterialQty, minRawMaterialUnit, leadTime, isSupplyBranch, isExpired, expiredDays)
-                                                VALUES('${rawMaterialId}', '${data.rawMaterialCategoryId}', '${data.rawMaterialName}',  ${data.gujaratiRawMaterialName ? `'${data.gujaratiRawMaterialName}'` : null},  ${data.minRawMaterialQty}, '${data.minRawMaterialUnit}', ${data.leadTime}, ${data.isSupplayBranch}, ${data.isExpired}, ${data.isExpired ? `${data.expiredDays}` : 0});
+                    const sql_querry_addUser = `INSERT INTO factory_rawMaterial_data(rawMaterialId, rawMaterialCategoryId, rawMaterialName, gujaratiRawMaterialName, minRawMaterialQty, minRawMaterialUnit, leadTime, isSupplyBranch, isQtyNum, isExpired, expiredDays)
+                                                VALUES('${rawMaterialId}', '${data.rawMaterialCategoryId}', '${data.rawMaterialName}',  ${data.gujaratiRawMaterialName ? `'${data.gujaratiRawMaterialName}'` : null},  ${data.minRawMaterialQty}, '${data.minRawMaterialUnit}', ${data.leadTime}, ${data.isSupplayBranch}, ${data.isQtyNum}, ${data.isExpired}, ${data.isExpired ? `${data.expiredDays}` : 0});
                                                 ${data.isSupplayBranch && data.isSupplayBranch == true ? `INSERT INTO inventory_product_data(productId, productCategoryId, productName, gujaratiProductName, minProductQty, minProductUnit, leadTime, isExpired, expiredDays)
                                                 VALUES('${rawMaterialId}', '${data.productCategoryId}', '${data.rawMaterialName}',  ${data.gujaratiRawMaterialName ? `'${data.gujaratiRawMaterialName}'` : null},  ${data.minRawMaterialQty}, '${data.minRawMaterialUnit}', ${data.leadTime}, ${data.isExpired}, ${data.isExpired ? `${data.expiredDays}` : 0});
                                                 INSERT INTO inventory_supplierProducts_data(supplierId, productId)
@@ -534,7 +524,7 @@ const addRawMaterial = async (req, res) => {
                                 let priorityNumber = index + 1; // Define Priority Number
                                 return `('${uniqueId}', '${rawMaterialId}', ${priorityNumber}, '${item.bigUnitName}', ${item.unitNumber}, '${item.smallUnitName}')`;
                             }).join(', ');
-                            console.log(addPriorityData);
+
                             const sql_querry_addPriority = `INSERT INTO factory_rmUnit_preference (preferenceId, rawMaterialId, priorityNumber, bigUnitName, unitNumber, smallUnitName)
                                                             VALUES ${addPriorityData};
                                                             ${data.isSupplayBranch && data.isSupplayBranch == true ? `INSERT INTO product_unit_preference (preferenceId, productId, priorityNumber, bigUnitName, unitNumber, smallUnitName)
@@ -574,8 +564,6 @@ const getRawMaterialTable = (req, res) => {
             var firstDay = new Date(y, m, 1).toString().slice(4, 15);
             var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
 
-            console.log("1111>>>>", firstDay);
-            console.log("1111>>>>", lastDay);
             const data = {
                 startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
                 endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
@@ -1432,9 +1420,6 @@ const getRawMaterialTable = (req, res) => {
                             console.error("An error occurd in SQL Queery", err);
                             return res.status(500).send('Database Error');;
                         } else {
-                            console.log(rows);
-                            console.log(numRows);
-                            console.log("Total Page :-", numPages);
                             if (numRows === 0) {
                                 const rows = [{
                                     'msg': 'No Data Found'
@@ -1444,8 +1429,6 @@ const getRawMaterialTable = (req, res) => {
                                 const datas = Object.values(JSON.parse(JSON.stringify(rows)));
                                 processDatas(datas)
                                     .then((data) => {
-                                        console.log('json 1', datas);
-                                        console.log('json 2', data);
                                         const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity, allConversation: data[index].vikJson } : { ...element, remainingStock: element.remainingStock + ' ' + element.minRawMaterialUnit, allConversation: data[index].vikJson },
                                             // console.log(data[index] && data[index].convertedQuantity)
                                         ) : []
@@ -1498,26 +1481,38 @@ const getRawMaterialTable = (req, res) => {
 
 const removeRawMaterial = async (req, res) => {
     try {
-        var rawMaterialId = req.query.rawMaterialId.trim();
-        req.query.rawMaterialId = pool.query(`SELECT rawMaterialId FROM factory_rawMaterial_data WHERE rawMaterialId = '${rawMaterialId}'`, (err, row) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM factory_rawMaterial_data WHERE rawMaterialId = '${rawMaterialId}';
-                                                  DELETE FROM inventory_supplierProducts_data WHERE productId = '${rawMaterialId}' AND supplierId = '${process.env.RAJ_MANDIR_FACTORY_ID}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                var rawMaterialId = req.query.rawMaterialId.trim();
+                req.query.rawMaterialId = pool.query(`SELECT rawMaterialId FROM factory_rawMaterial_data WHERE rawMaterialId = '${rawMaterialId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send("Raw Material Deleted Successfully");
+                    if (row && row.length) {
+                        const sql_querry_removedetails = `DELETE FROM factory_rawMaterial_data WHERE rawMaterialId = '${rawMaterialId}';
+                                                  DELETE FROM inventory_supplierProducts_data WHERE productId = '${rawMaterialId}' AND supplierId = '${process.env.RAJ_MANDIR_FACTORY_ID}'`;
+                        pool.query(sql_querry_removedetails, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');
+                            }
+                            return res.status(200).send("Raw Material Deleted Successfully");
+                        })
+                    } else {
+                        return res.send('Raw Material Id Not Found');
+                    }
                 })
             } else {
-                return res.send('Raw Material Id Not Found');
+                return res.status(400).send('You are Not Authorised');
             }
-        })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');
@@ -1528,134 +1523,152 @@ const removeRawMaterial = async (req, res) => {
 
 const updateRawMaterial = async (req, res) => {
     try {
-        const rawMaterialId = req.body.rawMaterialId;
-        const priorityArray = req.body.priorityArray;
-        const data = {
-            productCategoryId: req.body.productCategoryId,
-            rawMaterialCategoryId: req.body.rawMaterialCategoryId,
-            rawMaterialName: req.body.rawMaterialName.trim(),
-            gujaratiRawMaterialName: req.body.gujaratiRawMaterialName,
-            minRawMaterialQty: req.body.minRawMaterialQty,
-            minRawMaterialUnit: req.body.minRawMaterialUnit.trim(),
-            leadTime: req.body.leadTime ? req.body.leadTime : 0,
-            isExpired: req.body.isExpired,
-            expiredDays: req.body.expiredDays ? req.body.expiredDays : 0,
-            isSupplayBranch: req.body.isSupplayBranch ? req.body.isSupplayBranch : false
-        }
-        if (!rawMaterialId || !data.rawMaterialName || !data.minRawMaterialQty || !data.minRawMaterialUnit) {
-            return res.status(400).send("Please Fill All The Fields");
-        }
-        const sql_querry_updatedetails = `UPDATE factory_rawMaterial_data SET 
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                const rawMaterialId = req.body.rawMaterialId;
+                const priorityArray = req.body.priorityArray;
+                const data = {
+                    productCategoryId: req.body.productCategoryId,
+                    rawMaterialCategoryId: req.body.rawMaterialCategoryId,
+                    rawMaterialName: req.body.rawMaterialName.trim(),
+                    gujaratiRawMaterialName: req.body.gujaratiRawMaterialName,
+                    minRawMaterialQty: req.body.minRawMaterialQty,
+                    minRawMaterialUnit: req.body.minRawMaterialUnit.trim(),
+                    leadTime: req.body.leadTime ? req.body.leadTime : 0,
+                    isQtyNum: req.body.isQtyNum ? req.body.isQtyNum : false,
+                    isExpired: req.body.isExpired,
+                    expiredDays: req.body.expiredDays ? req.body.expiredDays : 0,
+                    isSupplayBranch: req.body.isSupplayBranch ? req.body.isSupplayBranch : false
+                }
+                if (!rawMaterialId || !data.rawMaterialName || !data.minRawMaterialQty || !data.minRawMaterialUnit) {
+                    return res.status(400).send("Please Fill All The Fields");
+                }
+                const sql_querry_updatedetails = `UPDATE factory_rawMaterial_data SET 
                                                 rawMaterialCategoryId = '${data.rawMaterialCategoryId}',
                                                 rawMaterialName = '${data.rawMaterialName}',
                                                 gujaratiRawMaterialName = ${data.gujaratiRawMaterialName ? `'${data.gujaratiRawMaterialName}'` : null},
                                                 minRawMaterialQty = ${data.minRawMaterialQty},
                                                 minRawMaterialUnit = '${data.minRawMaterialUnit}',
                                                 leadTime = ${data.leadTime},
+                                                isQtyNum = ${data.isQtyNum},
                                                 isExpired = ${data.isExpired},
                                                 expiredDays = ${data.isExpired ? `${data.expiredDays}` : 0}
                                             WHERE rawMaterialId = '${rawMaterialId}';
                                             UPDATE inventory_product_data SET
                                                 minProductUnit = minProductUnit
-                                            WHERE rawMaterialId = '${rawMaterialId}'`;
-        pool.query(sql_querry_updatedetails, (err, datas) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            sql_querry_removePriorityArray = `DELETE FROM factory_rmUnit_preference WHERE rawMaterialId = '${rawMaterialId}'`;
-            pool.query(sql_querry_removePriorityArray, (err, result) => {
-                if (err) {
-                    console.error("An error occurd in SQL Queery", err);
-                    return res.status(500).send('Database Error');
-                }
-                if (priorityArray.length != 0 && priorityArray) {
-                    let addPriorityData = priorityArray.map((item, index) => {
-                        let uniqueId = `PriorityId_${Date.now() + index}`; // Generating a unique ID using current timestamp
-                        let priorityNumber = index + 1; // Define Priority Number
-                        return `('${uniqueId}', '${rawMaterialId}', ${priorityNumber}, '${item.bigUnitName}', ${item.unitNumber}, '${item.smallUnitName}')`;
-                    }).join(', ');
-                    const sql_querry_addPriority = `INSERT INTO factory_rmUnit_preference (preferenceId, rawMaterialId, priorityNumber, bigUnitName, unitNumber, smallUnitName)
-                                                    VALUES ${addPriorityData}`;
-                    pool.query(sql_querry_addPriority, (err, result) => {
-                        if (err) {
-                            console.error("An error occurd in SQL Queery", err);
-                            return res.status(500).send('Database Error');
-                        }
-                        console.log('Unit Prefrence Updated');
-                    });
-                }
-                sql_querry_getOldStatus = `SELECT isSupplyBranch FROM factory_rawMaterial_data WHERE rawMaterialId = ${rawMaterialId}`;
-                pool.query(sql_querry_getOldStatus, (err, status) => {
+                                            WHERE productId = '${rawMaterialId}'`;
+                pool.query(sql_querry_updatedetails, (err, datas) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    const isSupplyBranchStatus = status && status[0].length ? status[0].isSupplyBranch : data.isSupplayBranch;
-                    if (data.isSupplayBranch == isSupplyBranchStatus) {
-                        return res.status(200).send("Raw Material Update Successfully");
-                    } else {
-                        sql_querry_getId = `SELECT productId FROM inventory_product_data WHERE productId = '${rawMaterialId}';`;
-                        pool.query(sql_querry_getId, (err, id) => {
+                    sql_querry_removePriorityArray = `DELETE FROM factory_rmUnit_preference WHERE rawMaterialId = '${rawMaterialId}'`;
+                    pool.query(sql_querry_removePriorityArray, (err, result) => {
+                        if (err) {
+                            console.error("An error occurd in SQL Queery", err);
+                            return res.status(500).send('Database Error');
+                        }
+                        if (priorityArray.length != 0 && priorityArray) {
+                            let addPriorityData = priorityArray.map((item, index) => {
+                                let uniqueId = `PriorityId_${Date.now() + index}`; // Generating a unique ID using current timestamp
+                                let priorityNumber = index + 1; // Define Priority Number
+                                return `('${uniqueId}', '${rawMaterialId}', ${priorityNumber}, '${item.bigUnitName}', ${item.unitNumber}, '${item.smallUnitName}')`;
+                            }).join(', ');
+                            const sql_querry_addPriority = `INSERT INTO factory_rmUnit_preference (preferenceId, rawMaterialId, priorityNumber, bigUnitName, unitNumber, smallUnitName)
+                                                    VALUES ${addPriorityData}`;
+                            pool.query(sql_querry_addPriority, (err, result) => {
+                                if (err) {
+                                    console.error("An error occurd in SQL Queery", err);
+                                    return res.status(500).send('Database Error');
+                                }
+                                console.log('Unit Prefrence Updated');
+                            });
+                        }
+                        sql_querry_getOldStatus = `SELECT isSupplyBranch FROM factory_rawMaterial_data WHERE factory_rawMaterial_data.rawMaterialId = '${rawMaterialId}'`;
+                        pool.query(sql_querry_getOldStatus, (err, status) => {
+                            const isSupplyBranchStatus = status ? status[0].isSupplyBranch : data.isSupplayBranch;
+
                             if (err) {
                                 console.error("An error occurd in SQL Queery", err);
                                 return res.status(500).send('Database Error');
-                            }
-                            const materialId = id && id[0].length ? id[0].productId : null;
-                            if (materialId) {
-                                if (data.isSupplayBranch) {
-                                    sql_querry_manage = `INSERT INTO inventory_supplierProducts_data(supplierId, productId)
-                                                         VALUES('${process.env.RAJ_MANDIR_FACTORY_ID}','${rawMaterialId}')`;
-                                } else {
-                                    sql_querry_manage = `DELETE FROM factory_supplierProducts_data 
-                                                         WHERE rawMaterialId = '${process.env.RAJ_MANDIR_FACTORY_ID}' AND rmSupplierId = '${rawMaterialId}'`;
-                                }
-                                pool.query(sql_querry_manage, (err, msg) => {
-                                    if (err) {
-                                        console.error("An error occurd in SQL Queery", err);
-                                        return res.status(500).send('Database Error');
-                                    }
-                                    return res.status(200).send("Raw Material Update Successfully");
-                                })
+                            } else if (data.isSupplayBranch == isSupplyBranchStatus) {
+                                return res.status(200).send("Raw Material Update Successfully");
                             } else {
-                                if (data.isSupplayBranch) {
-                                    sql_querry_mang = `INSERT INTO inventory_product_data(productId, productCategoryId, productName, gujaratiProductName, minProductQty, minProductUnit, leadTime, isExpired, expiredDays)
-                                                       VALUES('${rawMaterialId}', '${data.productCategoryId}', '${data.rawMaterialName}',  ${data.gujaratiRawMaterialName ? `'${data.gujaratiRawMaterialName}'` : null},  ${data.minRawMaterialQty}, '${data.minRawMaterialUnit}', ${data.leadTime}, ${data.isExpired}, ${data.isExpired ? `${data.expiredDays}` : 0});
-                                                       INSERT INTO inventory_supplierProducts_data(supplierId, productId)
-                                                       VALUES('${process.env.RAJ_MANDIR_FACTORY_ID}','${rawMaterialId}')`;
-                                } else {
-                                    return res.status(200).send("Raw Material Update Successfully");
-                                }
-                                pool.query(sql_querry_mang, (err, msg) => {
+                                sql_querry_getId = `SELECT productId FROM inventory_product_data WHERE productId = '${rawMaterialId}';`;
+                                pool.query(sql_querry_getId, (err, id) => {
                                     if (err) {
                                         console.error("An error occurd in SQL Queery", err);
                                         return res.status(500).send('Database Error');
                                     }
-                                    if (priorityArray.length != 0 && priorityArray) {
-                                        let addPriorityData = priorityArray.map((item, index) => {
-                                            let uniqueId = `PriorityId_${Date.now() + index}`; // Generating a unique ID using current timestamp
-                                            let priorityNumber = index + 1; // Define Priority Number
-                                            return `('${uniqueId}', '${rawMaterialId}', ${priorityNumber}, '${item.bigUnitName}', ${item.unitNumber}, '${item.smallUnitName}')`;
-                                        }).join(', ');
-                                        const sql_querry_addPriority = `INSERT INTO product_unit_preference (preferenceId, productId, priorityNumber, bigUnitName, unitNumber, smallUnitName)
-                                                                        VALUES ${addPriorityData}`;
-                                        pool.query(sql_querry_addPriority, (err, result) => {
+                                    const materialId = id && id[0] ? id[0].productId : null;
+                                    console.log(materialId, 'jovu');
+                                    if (materialId) {
+                                        if (data.isSupplayBranch) {
+                                            sql_querry_manage = `INSERT INTO inventory_supplierProducts_data(supplierId, productId)
+                                                         VALUES('${process.env.RAJ_MANDIR_FACTORY_ID}','${rawMaterialId}');
+                                                         UPDATE factory_rawMaterial_data SET isSupplyBranch = ${data.isSupplayBranch}  WHERE rawMaterialId = '${rawMaterialId}'`;
+                                        } else {
+                                            sql_querry_manage = `DELETE FROM inventory_supplierProducts_data 
+                                                         WHERE supplierId = '${process.env.RAJ_MANDIR_FACTORY_ID}' AND productId = '${rawMaterialId}';
+                                                         UPDATE factory_rawMaterial_data SET isSupplyBranch = ${data.isSupplayBranch}  WHERE rawMaterialId = '${rawMaterialId}'`;
+                                        }
+                                        pool.query(sql_querry_manage, (err, msg) => {
                                             if (err) {
                                                 console.error("An error occurd in SQL Queery", err);
                                                 return res.status(500).send('Database Error');
                                             }
-                                            console.log('Product Unit Prefrence Updated');
-                                        });
+                                            return res.status(200).send("Raw Material Update Successfully");
+                                        })
+                                    } else {
+                                        if (data.isSupplayBranch) {
+                                            sql_querry_mang = `INSERT INTO inventory_product_data(productId, productCategoryId, productName, gujaratiProductName, minProductQty, minProductUnit, leadTime, isExpired, expiredDays)
+                                                       VALUES('${rawMaterialId}', '${data.productCategoryId}', '${data.rawMaterialName}',  ${data.gujaratiRawMaterialName ? `'${data.gujaratiRawMaterialName}'` : null},  ${data.minRawMaterialQty}, '${data.minRawMaterialUnit}', ${data.leadTime}, ${data.isExpired}, ${data.isExpired ? `${data.expiredDays}` : 0});
+                                                       INSERT INTO inventory_supplierProducts_data(supplierId, productId)
+                                                       VALUES('${process.env.RAJ_MANDIR_FACTORY_ID}','${rawMaterialId}');
+                                                       UPDATE factory_rawMaterial_data SET isSupplyBranch = ${data.isSupplayBranch}  WHERE rawMaterialId = '${rawMaterialId}'`;
+                                        } else {
+                                            return res.status(200).send("Raw Material Update Successfully");
+                                        }
+                                        pool.query(sql_querry_mang, (err, msg) => {
+                                            if (err) {
+                                                console.error("An error occurd in SQL Queery", err);
+                                                return res.status(500).send('Database Error');
+                                            }
+                                            if (priorityArray.length != 0 && priorityArray) {
+                                                let addPriorityData = priorityArray.map((item, index) => {
+                                                    let uniqueId = `PriorityId_${Date.now() + index}`; // Generating a unique ID using current timestamp
+                                                    let priorityNumber = index + 1; // Define Priority Number
+                                                    return `('${uniqueId}', '${rawMaterialId}', ${priorityNumber}, '${item.bigUnitName}', ${item.unitNumber}, '${item.smallUnitName}')`;
+                                                }).join(', ');
+                                                const sql_querry_addPriority = `INSERT INTO product_unit_preference (preferenceId, productId, priorityNumber, bigUnitName, unitNumber, smallUnitName)
+                                                                        VALUES ${addPriorityData}`;
+                                                pool.query(sql_querry_addPriority, (err, result) => {
+                                                    if (err) {
+                                                        console.error("An error occurd in SQL Queery", err);
+                                                        return res.status(500).send('Database Error');
+                                                    }
+                                                    console.log('Product Unit Prefrence Updated');
+                                                });
+                                            }
+                                            return res.status(200).send("Raw Material Update Successfully");
+                                        })
                                     }
-                                    return res.status(200).send("Raw Material Update Successfully");
                                 })
                             }
                         })
-                    }
+                        // return res.status(200).send("Raw Material Update Successfully");
+                    })
                 })
-                return res.status(200).send("Raw Material Update Successfully");
-            })
-        })
+            } else {
+                return res.status(400).send('You are Not Authorised');
+            }
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');
@@ -1670,7 +1683,7 @@ const getRawMaterialDetailsById = (req, res) => {
         if (!rawMaterialId) {
             return res.status(404).send('ProductId Not Found');
         }
-        sql_queries_getdetails = `SELECT rawMaterialId, rawMaterialCategoryId, rawMaterialName, gujaratiRawMaterialName, minRawMaterialQty, minRawMaterialUnit, leadTime, isSupplyBranch AS isSupplayBranch, isExpired, expiredDays FROM factory_rawMaterial_data WHERE rawMaterialId = '${rawMaterialId}';
+        sql_queries_getdetails = `SELECT rawMaterialId, rawMaterialCategoryId, rawMaterialName, gujaratiRawMaterialName, minRawMaterialQty, minRawMaterialUnit, leadTime, isSupplyBranch AS isSupplayBranch, isQtyNum, isExpired, expiredDays FROM factory_rawMaterial_data WHERE rawMaterialId = '${rawMaterialId}';
                                   SELECT priorityNumber, bigUnitName, unitNumber, smallUnitName FROM factory_rmUnit_preference WHERE rawMaterialId = '${rawMaterialId}';
                                   SELECT productCategoryId FROM inventory_product_data WHERE productId = '${rawMaterialId}'`;
         pool.query(sql_queries_getdetails, (err, data) => {
@@ -1680,7 +1693,7 @@ const getRawMaterialDetailsById = (req, res) => {
             }
             const unitNames = data[1].map(item => item.bigUnitName);
             unitNames.splice(0, 0, data[0][0].minRawMaterialUnit);
-            console.log(data[2]);
+
             const mergedObject = {
                 ...data[0][0], // Copy the first object as it contains the rm information
                 productCategoryId: data && data[2].length ? data[2][0].productCategoryId : '',
@@ -1783,8 +1796,6 @@ const getCategoryWiseUsedByRawMaterial = (req, res) => {
                 const datas = Object.values(JSON.parse(JSON.stringify(result)));
                 processDatas(datas)
                     .then((data) => {
-                        console.log('json 1', datas);
-                        console.log('json 2', data);
                         const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minRawMaterialUnit },
                             // console.log(data[index] && data[index].convertedQuantity)
                         ) : []
@@ -2202,8 +2213,6 @@ const exportExcelSheetForRawMaterialTable = (req, res) => {
             const datas = Object.values(JSON.parse(JSON.stringify(rows)));
             processDatas(datas)
                 .then((data) => {
-                    console.log('json 1', datas);
-                    console.log('json 2', data);
                     const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minRawMaterialUnit },
                         // console.log(data[index] && data[index].convertedQuantity)
                     ) : []
@@ -2516,7 +2525,6 @@ const exportExcelSheetForRawMaterialTable = (req, res) => {
                             console.log(outStockProducts);
                             //Looping through User data
                             const arrstockOut = outStockProducts;
-                            console.log(">>>", arr);
                             let outStockcounter = 1;
                             arrstockOut.forEach((user, index) => {
                                 user.s_no = outStockcounter;
@@ -2702,8 +2710,6 @@ const exportExcelSheetForRawMaterialTable = (req, res) => {
 async function createPDF(res, datas, tableHeading) {
     try {
         // Create a new PDF document
-        console.log(';;;;;;', datas);
-        console.log('?????', tableHeading);
         const doc = new jsPDF();
 
         // JSON data
@@ -2767,7 +2773,6 @@ async function createPDF(res, datas, tableHeading) {
         // Save the PDF to a file
         // const pdfFilename = 'output.pdf';
         // fs.writeFileSync(pdfFilename, doc.output());
-        // console.log(`PDF saved as ${pdfFilename}`);
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).json('Internal Server Error');
@@ -3137,10 +3142,7 @@ const exportPdfForAllRawMaterialData = (req, res) => {
                     const datas = Object.values(JSON.parse(JSON.stringify(rows)));
                     processDatas(datas)
                         .then((data) => {
-                            console.log('json 1', datas);
-                            console.log('json 2', data);
                             const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity, allConversation: data[index].vikJson } : { ...element, remainingStock: element.remainingStock + ' ' + element.minRawMaterialUnit, allConversation: data[index].vikJson },
-                                // console.log(data[index] && data[index].convertedQuantity)
                             ) : []
                             let newData = [];
                             Promise.all(
@@ -3164,7 +3166,6 @@ const exportPdfForAllRawMaterialData = (req, res) => {
                                         });
                                 }) : [])
                                 .then((rows) => {
-                                    console.log(rows);
                                     const extractedData = rows.map(rm => {
                                         return {
                                             "Raw Material Name": rm.rawMaterialName,

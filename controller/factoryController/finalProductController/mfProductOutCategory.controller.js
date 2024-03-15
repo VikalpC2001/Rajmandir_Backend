@@ -27,7 +27,6 @@ const getmfProductOutCategoryList = async (req, res) => {
 
 const addmfProductOutCategory = async (req, res) => {
     try {
-
         const uid1 = new Date();
         const stockOutCategoryId = String("stockOutCategory_" + uid1.getTime());
         console.log("...", stockOutCategoryId);

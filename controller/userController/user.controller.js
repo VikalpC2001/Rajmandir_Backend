@@ -306,7 +306,7 @@ const addUserDetailsByBranchOwner = async (req, res) => {
     try {
 
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userRights = decoded.id.rights;
@@ -368,7 +368,7 @@ const removeUserDetails = async (req, res) => {
 
     try {
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userRights = decoded.id.rights;
@@ -429,7 +429,7 @@ const fillUserDetails = (req, res) => {
 const updateUserDetailsByOwner = async (req, res) => {
     try {
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userRights = decoded.id.rights;

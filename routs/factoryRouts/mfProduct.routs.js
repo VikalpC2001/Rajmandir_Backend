@@ -57,15 +57,20 @@ router.get('/fillMfProductStockInData', protect, mfStockInController.fillMfProdu
 router.post('/addMfProductStockInData', protect, mfStockInController.addMfProductStockInData);
 router.delete('/removeMfProductStockInData', protect, mfStockInController.removeMfProductStockInData);
 router.post('/updateMfProductStockInData', protect, mfStockInController.updateMfProductStockInData);
+router.get('/exportExcelSheetForMfStockIn', protect, mfStockInController.exportExcelSheetForMfStockIn);
+router.get('/exportPdfForMfStockIn', protect, mfStockInController.exportPdfForMfStockIn);
 
 // Manufacture Product StockOut Data
 
 const mfStockOutController = require("../../controller/factoryController/finalProductController/mfProductStockOut.controller.js");
 
 router.get('/getMfStockOutList', protect, mfStockOutController.getMfStockOutList);
+router.get('/fillMfProductStockOutData', protect, mfStockOutController.fillMfProductStockOutData);
 router.post('/addMfProductStockOutData', protect, mfStockOutController.addMfProductStockOutData);
 router.delete('/removeMfProductStockOutTransaction', protect, mfStockOutController.removeMfProductStockOutTransaction);
-router.post('/updateRmStockOutTransaction', protect, mfStockOutController.updateRmStockOutTransaction);
+router.post('/updateMfStockOutTransaction', protect, mfStockOutController.updateMfStockOutTransaction);
+router.get('/exportExcelSheetForMfStockOut', protect, mfStockOutController.exportExcelSheetForMfStockOut);
+router.get('/exportPdfForMfStockOut', protect, mfStockOutController.exportPdfForMfStockOut);
 
 // Other Source Routs
 
@@ -83,7 +88,8 @@ const recipeeController = require("../../controller/factoryController/finalProdu
 router.post('/addRecipeeData', protect, recipeeController.addRecipeeData);
 router.delete('/removeRecipeeData', protect, recipeeController.removeRecipeeData);
 router.post('/updateRecipeeData', protect, recipeeController.updateRecipeeData);
-router.get('/fillRecipeeDataById', protect, recipeeController.fillRecipeeDataById);
+router.get('/fillRecipeeDataByQty', protect, recipeeController.fillRecipeeDataByQty);
+router.get('/fillRecipeeDataByBatch', protect, recipeeController.fillRecipeeDataByBatch);
 router.get('/fillEditRecipeeDataById', protect, recipeeController.fillEditRecipeeDataById);
 
 // Distributor Transaction Routs
@@ -117,6 +123,12 @@ const commonTableController = require("../../controller/factoryController/finalP
 router.get('/getCommonRawMaterialData', protect, commonTableController.getCommonRawMaterialData);
 router.get('/getCommonOtherSourceData', protect, commonTableController.getCommonOtherSourceData);
 router.get('/getCommonMfProductData', protect, commonTableController.getCommonMfProductData);
+router.get('/exportExcelForCommonRawMaterialData', protect, commonTableController.exportExcelForCommonRawMaterialData);
+router.get('/exportExcelForCommonOtherSourceData', protect, commonTableController.exportExcelForCommonOtherSourceData);
+router.get('/exportExcelForCommonMfProductData', protect, commonTableController.exportExcelForCommonMfProductData);
+router.get('/exportPDFForCommonRawMaterialData', protect, commonTableController.exportPDFForCommonRawMaterialData);
+router.get('/exportPDFForCommonOtherSourceData', protect, commonTableController.exportPDFForCommonOtherSourceData);
+router.get('/exportPDFForCommonMfProductData', protect, commonTableController.exportPDFForCommonMfProductData);
 
 
 module.exports = router;

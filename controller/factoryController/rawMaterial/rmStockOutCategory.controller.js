@@ -1,4 +1,5 @@
 const pool = require('../../../database');
+const jwt = require("jsonwebtoken");
 
 // Get Category List
 
@@ -8,6 +9,9 @@ const getRmStockOutCategoryList = async (req, res) => {
         const numPerPage = req.query.numPerPage;
         const skip = (page - 1) * numPerPage;
         const limit = skip + ',' + numPerPage;
+        var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+        var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+        var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
         const startDate = (req.query.startDate ? req.query.startDate : '').slice(4, 15);
         const endDate = (req.query.endDate ? req.query.endDate : '').slice(4, 15);
         sql_querry_getdetails = `SELECT count(*) as numRows FROM factory_rmStockOutCategory_data`;
@@ -21,16 +25,26 @@ const getRmStockOutCategoryList = async (req, res) => {
                 if (req.query.startDate && req.query.endDate) {
                     sql_queries_getCategoryTable = `SELECT
                                                         fscd.stockOutCategoryId,
-                                                        fscd.stockOutCategoryName
+                                                        fscd.stockOutCategoryName,
+                                                        COALESCE(SUM(frsod.rmStockOutPrice),0) AS usedPrice
                                                     FROM
                                                         factory_rmStockOutCategory_data AS fscd
+                                                    LEFT JOIN factory_rmStockOut_data AS frsod ON frsod.rmStockOutCategory = fscd.stockOutCategoryId 
+                                                    AND frsod.rmStockOutDate BETWEEN STR_TO_DATE('${startDate}','%b %d %Y') AND STR_TO_DATE('${endDate}','%b %d %Y')
+                                                    GROUP BY fscd.stockOutCategoryId
+                                                    ORDER BY fscd.stockOutCategoryName
                                                     LIMIT ${limit}`;
                 } else {
                     sql_queries_getCategoryTable = `SELECT
                                                         fscd.stockOutCategoryId,
-                                                        fscd.stockOutCategoryName
+                                                        fscd.stockOutCategoryName,
+                                                        COALESCE(SUM(frsod.rmStockOutPrice),0) AS usedPrice
                                                     FROM
                                                         factory_rmStockOutCategory_data AS fscd
+                                                    LEFT JOIN factory_rmStockOut_data AS frsod ON frsod.rmStockOutCategory = fscd.stockOutCategoryId 
+                                                    AND frsod.rmStockOutDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                    GROUP BY fscd.stockOutCategoryId
+                                                    ORDER BY fscd.stockOutCategoryName
                                                     LIMIT ${limit}`;
                 }
                 pool.query(sql_queries_getCategoryTable, (err, rows, fields) => {
@@ -47,7 +61,7 @@ const getRmStockOutCategoryList = async (req, res) => {
                             }]
                             return res.status(200).send({ rows, numRows });
                         } else {
-                            return res.status(200).send({ rows, numRows, totalCategoryStockOutPrice: rows[0].totalCategoryStockOutPrice });
+                            return res.status(200).send({ rows, numRows });
                         }
                     }
                 });
@@ -105,27 +119,38 @@ const addRmStockOutCategory = async (req, res) => {
 // Remove stockOutCategory API
 
 const removeRmStockOutCategory = async (req, res) => {
-
     try {
-        const stockOutCategoryId = req.query.stockOutCategoryId.trim();
-        req.query.stockOutCategoryId = pool.query(`SELECT stockOutCategoryId FROM factory_rmStockOutCategory_data WHERE stockOutCategoryId = '${stockOutCategoryId}'`, (err, row) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM factory_rmStockOutCategory_data WHERE stockOutCategoryId = '${stockOutCategoryId}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if (rights == 1) {
+                const stockOutCategoryId = req.query.stockOutCategoryId.trim();
+                req.query.stockOutCategoryId = pool.query(`SELECT stockOutCategoryId FROM factory_rmStockOutCategory_data WHERE stockOutCategoryId = '${stockOutCategoryId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send("Category Deleted Successfully");
+                    if (row && row.length) {
+                        const sql_querry_removedetails = `DELETE FROM factory_rmStockOutCategory_data WHERE stockOutCategoryId = '${stockOutCategoryId}'`;
+                        pool.query(sql_querry_removedetails, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');
+                            }
+                            return res.status(200).send("Category Deleted Successfully");
+                        })
+                    } else {
+                        return res.send('CategoryId Not Found');
+                    }
                 })
             } else {
-                return res.send('CategoryId Not Found');
+                return res.status(400).send('You are Not Authorised');
             }
-        })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');

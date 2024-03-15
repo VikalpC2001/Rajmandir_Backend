@@ -207,13 +207,14 @@ const getStockInList = async (req, res) => {
 const addStockInDetails = async (req, res) => {
     try {
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userId = decoded.id.id;
             const branchId = decoded.id.branchId;
             const uid1 = new Date();
             const stockInId = String("stockIn_" + uid1.getTime());
+            const factoryId = process.env.RAJ_MANDIR_FACTORY_ID;
             const data = {
                 productId: req.body.productId,
                 productQty: req.body.productQty,
@@ -227,6 +228,8 @@ const addStockInDetails = async (req, res) => {
             }
             if (!data.productId || !data.productQty || !data.productUnit || !data.totalPrice || !data.supplierId || !data.stockInPaymentMethod || !data.stockInDate) {
                 return res.status(400).send("Please Fill all the feilds");
+            } else if (data.supplierId == factoryId) {
+                return res.status(404).send("You Can Not Add Stock-In Factory Product");
             } else {
                 const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM product_unit_preference WHERE productId = '${data.productId}' ORDER BY product_unit_preference.priorityNumber ASC;
                                                  SELECT ipd.minProductUnit AS  minProductUnit, ipd.isExpired AS isExpired, ipd.expiredDays AS expiredDays FROM inventory_product_data AS ipd WHERE ipd.productId = '${data.productId}'`;
@@ -298,23 +301,28 @@ const addStockInDetails = async (req, res) => {
 // Remove StockIn API
 
 const removeStockInTransaction = async (req, res) => {
-
     try {
         const stockInId = req.query.stockInId
-        req.query.stockInId = pool.query(`SELECT stockInId FROM inventory_stockIn_data WHERE stockInId = '${stockInId}'`, (err, row) => {
+        const factoryId = process.env.RAJ_MANDIR_FACTORY_ID;
+        req.query.stockInId = pool.query(`SELECT stockInId, supplierId FROM inventory_stockIn_data WHERE stockInId = '${stockInId}'`, (err, row) => {
             if (err) {
                 console.error("An error occurd in SQL Queery", err);
                 return res.status(500).send('Database Error');
             }
             if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM inventory_stockIn_data WHERE stockInId = '${stockInId}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
-                    if (err) {
-                        console.error("An error occurd in SQL Queery", err);
-                        return res.status(500).send('Database Error');
-                    }
-                    return res.status(200).send("Transaction Deleted Successfully");
-                })
+                const supplierId = row && row[0].supplierId ? row[0].supplierId : null;
+                if (factoryId == supplierId) {
+                    return res.status(400).send('You Can Not Delete Factory Stock-In');
+                } else {
+                    const sql_querry_removedetails = `DELETE FROM inventory_stockIn_data WHERE stockInId = '${stockInId}'`;
+                    pool.query(sql_querry_removedetails, (err, data) => {
+                        if (err) {
+                            console.error("An error occurd in SQL Queery", err);
+                            return res.status(500).send('Database Error');
+                        }
+                        return res.status(200).send("Transaction Deleted Successfully");
+                    })
+                }
             } else {
                 return res.status(400).send('Transaction Not Found');
             }
@@ -350,14 +358,14 @@ const fillStockInTransaction = (req, res) => {
 
 const updateStockInTransaction = async (req, res) => {
     try {
-
         let token;
-        token = req.headers.authorization.split(" ")[1];
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const userId = decoded.id.id;
             const branchId = decoded.id.branchId;
             const stockInId = req.body.stockInId;
+            const factoryId = process.env.RAJ_MANDIR_FACTORY_ID;
             const data = {
                 productId: req.body.productId,
                 productQty: req.body.productQty,
@@ -372,24 +380,32 @@ const updateStockInTransaction = async (req, res) => {
             if (!data.productId || !data.productQty || !data.productUnit || !data.totalPrice || !data.supplierId || !data.stockInPaymentMethod || !data.stockInDate) {
                 return res.status(400).send("Please Fill all the feilds");
             }
-            const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM product_unit_preference WHERE productId = '${data.productId}' ORDER BY product_unit_preference.priorityNumber ASC;
-                                             SELECT ipd.minProductUnit AS  minProductUnit, ipd.isExpired AS isExpired, ipd.expiredDays AS expiredDays FROM inventory_product_data AS ipd WHERE ipd.productId = '${data.productId}'`;
-            pool.query(sql_queries_getNeedData, (err, result) => {
+            req.body.productId = pool.query(`SELECT productId FROM inventory_supplierProducts_data WHERE supplierId = '${factoryId}' AND productId = '${data.productId}'`, (err, row) => {
                 if (err) {
                     console.error("An error occurd in SQL Queery", err);
                     return res.status(500).send('Database Error');
                 }
-                const needData = {
-                    unitsData: result && result[0] ? Object.values(JSON.parse(JSON.stringify(result[0]))) : null,
-                    toUnit: result && result[1][0] && result[1][0].minProductUnit ? result[1][0].minProductUnit : null,
-                    isExpired: result && result[1][0] && result[1][0].isExpired ? result[1][0].isExpired : 0,
-                    expiredDays: result && result[1][0] && result[1][0].expiredDays ? result[1][0].expiredDays : 0
-                }
-                console.log(needData.unitsData);
+                if (row && row.length) {
+                    return res.status(400).send('You Can Not Edit Factory Supplied Data');
+                } else {
+                    const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM product_unit_preference WHERE productId = '${data.productId}' ORDER BY product_unit_preference.priorityNumber ASC;
+                                                     SELECT ipd.minProductUnit AS  minProductUnit, ipd.isExpired AS isExpired, ipd.expiredDays AS expiredDays FROM inventory_product_data AS ipd WHERE ipd.productId = '${data.productId}'`;
+                    pool.query(sql_queries_getNeedData, (err, result) => {
+                        if (err) {
+                            console.error("An error occurd in SQL Queery", err);
+                            return res.status(500).send('Database Error');
+                        }
+                        const needData = {
+                            unitsData: result && result[0] ? Object.values(JSON.parse(JSON.stringify(result[0]))) : null,
+                            toUnit: result && result[1][0] && result[1][0].minProductUnit ? result[1][0].minProductUnit : null,
+                            isExpired: result && result[1][0] && result[1][0].isExpired ? result[1][0].isExpired : 0,
+                            expiredDays: result && result[1][0] && result[1][0].expiredDays ? result[1][0].expiredDays : 0
+                        }
+                        console.log(needData.unitsData);
 
-                const productFinalQty = (needData.unitsData && needData.unitsData.length !== 0) ? convertUnits(needData.unitsData, data.productQty, data.productUnit, needData.toUnit) : data.productQty;
-                const productPrice = data.totalPrice / productFinalQty
-                const sql_querry_updatedetails = `UPDATE inventory_stockIn_data SET 
+                        const productFinalQty = (needData.unitsData && needData.unitsData.length !== 0) ? convertUnits(needData.unitsData, data.productQty, data.productUnit, needData.toUnit) : data.productQty;
+                        const productPrice = data.totalPrice / productFinalQty
+                        const sql_querry_updatedetails = `UPDATE inventory_stockIn_data SET 
                                                                                 branchId = '${branchId}',
                                                                                 userId = '${userId}',
                                                                                 productId = '${data.productId}',
@@ -398,7 +414,7 @@ const updateStockInTransaction = async (req, res) => {
                                                                                 totalPrice = ${data.totalPrice},
                                                                                 billNumber = ${data.billNumber ? `'${data.billNumber}'` : null},
                                                                                 stockInDisplayQty = ${data.productQty},
-                                                                                stockInDisplayUnit = '${data.productUnit}'
+                                                                                stockInDisplayUnit = '${data.productUnit}',
                                                                                 supplierId = '${data.supplierId}',
                                                                                 stockInPaymentMethod = '${data.stockInPaymentMethod}',
                                                                                 stockInComment = ${data.stockInComment ? `'${data.stockInComment}'` : null},
@@ -406,13 +422,15 @@ const updateStockInTransaction = async (req, res) => {
                                                                                 remainingQty = ${productFinalQty},
                                                                                 stockInDate = STR_TO_DATE('${data.stockInDate}','%b %d %Y') 
                                                                           WHERE stockInId = '${stockInId}'`;
-                pool.query(sql_querry_updatedetails, (err, data) => {
-                    if (err) {
-                        console.error("An error occurd in SQL Queery", err);
-                        return res.status(500).send('Database Error');
-                    }
-                    return res.status(200).send("Transaction Updated Successfully");
-                })
+                        pool.query(sql_querry_updatedetails, (err, data) => {
+                            if (err) {
+                                console.error("An error occurd in SQL Queery", err);
+                                return res.status(500).send('Database Error');
+                            }
+                            return res.status(200).send("Transaction Updated Successfully");
+                        })
+                    })
+                }
             })
         } else {
             res.status(401);

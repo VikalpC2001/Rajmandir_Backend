@@ -7,7 +7,6 @@ const { processDatas } = require("../inventoryController/conversation.controller
 const { newConversationAsync } = require("../inventoryController/conversation.controller");
 const { computeConversionFactors } = require("../inventoryController/conversation.controller");
 
-
 // Get Product Counter Details
 
 const getProductCountDetailsById = (req, res) => {
@@ -273,8 +272,6 @@ const getSupplierByProductId = (req, res) => {
                     const datas = Object.values(JSON.parse(JSON.stringify(result)));
                     processDatas(datas)
                         .then((data) => {
-                            console.log('json 1', datas);
-                            console.log('json 2', data);
                             const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
                                 // console.log(data[index] && data[index].convertedQuantity)
                             ) : []
@@ -597,9 +594,6 @@ const getProductDetailsTable = (req, res) => {
                 var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
                 var firstDay = new Date(y, m, 1).toString().slice(4, 15);
                 var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
-
-                console.log("1111>>>>", firstDay);
-                console.log("1111>>>>", lastDay);
                 const data = {
                     startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
                     endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
@@ -1474,8 +1468,6 @@ const getProductDetailsTable = (req, res) => {
                                     const datas = Object.values(JSON.parse(JSON.stringify(rows)));
                                     processDatas(datas)
                                         .then((data) => {
-                                            console.log('json 1', datas);
-                                            console.log('json 2', data);
                                             const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity, allConversation: data[index].vikJson } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit, allConversation: data[index].vikJson },
                                                 // console.log(data[index] && data[index].convertedQuantity)
                                             ) : []
@@ -1531,25 +1523,44 @@ const getProductDetailsTable = (req, res) => {
 
 const removeProduct = async (req, res) => {
     try {
-        var productId = req.query.productId.trim();
-        req.query.productId = pool.query(`SELECT productId FROM inventory_product_data WHERE productId = '${productId}'`, (err, row) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            if (row && row.length) {
-                const sql_querry_removedetails = `DELETE FROM inventory_product_data WHERE productId = '${productId}'`;
-                pool.query(sql_querry_removedetails, (err, data) => {
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const factoryId = process.env.RAJ_MANDIR_FACTORY_ID;
+            const userRights = decoded.id.rights;
+            console.log(userRights, userRights == 1, 'fdfsaf');
+            if (userRights == 1) {
+                var productId = req.query.productId.trim();
+                req.query.productId = pool.query(`SELECT productId FROM inventory_product_data WHERE productId = '${productId}';
+                                                  SELECT productId FROM inventory_supplierProducts_data WHERE supplierId = '${factoryId}' AND productId = '${productId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send("Product Deleted Successfully");
+                    if (row && row[0].length) {
+                        if (row && row[1].length) {
+                            return res.status(400).send('You Can Not Delete Factory Product');
+                        } else {
+                            const sql_querry_removedetails = `DELETE FROM inventory_product_data WHERE productId = '${productId}'`;
+                            pool.query(sql_querry_removedetails, (err, data) => {
+                                if (err) {
+                                    console.error("An error occurd in SQL Queery", err);
+                                    return res.status(500).send('Database Error');
+                                }
+                                return res.status(200).send("Product Deleted Successfully");
+                            })
+                        }
+                    } else {
+                        return res.send('ProductId Not Found');
+                    }
                 })
             } else {
-                return res.send('ProductId Not Found');
+                return res.status(400).send("You Are Not Authorised...!");
             }
-        })
+        } else {
+            res.status(401).send("Please Login Firest.....!");
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');
@@ -1560,63 +1571,77 @@ const removeProduct = async (req, res) => {
 
 const updateProduct = async (req, res) => {
     try {
-        const productId = req.body.productId;
-        const priorityArray = req.body.priorityArray;
-        const data = {
-            productCategoryId: req.body.productCategoryId,
-            productName: req.body.productName.trim(),
-            gujaratiProductName: req.body.gujaratiProductName,
-            minProductQty: req.body.minProductQty,
-            minProductUnit: req.body.minProductUnit.trim(),
-            leadTime: req.body.leadTime ? req.body.leadTime : 0,
-            isExpired: req.body.isExpired,
-            expiredDays: req.body.expiredDays ? req.body.expiredDays : 0
-        }
-        if (!productId || !data.productName || !data.minProductQty || !data.minProductUnit) {
-            return res.status(400).send("Please Fill All The Fields");
-        }
-        const sql_querry_updatedetails = `UPDATE inventory_product_data SET 
-                                                productCategoryId = '${data.productCategoryId}',
-                                                productName = '${data.productName}',
-                                                gujaratiProductName = ${data.gujaratiProductName ? `'${data.gujaratiProductName}'` : null},
-                                                minProductQty = ${data.minProductQty},
-                                                minProductUnit = '${data.minProductUnit}',
-                                                leadTime = ${data.leadTime},
-                                                isExpired = ${data.isExpired},
-                                                expiredDays = ${data.isExpired ? `${data.expiredDays}` : 0}
-                                            WHERE productId = '${productId}'`;
-        pool.query(sql_querry_updatedetails, (err, data) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            sql_querry_removePriorityArray = `DELETE FROM product_unit_preference WHERE productId = '${productId}'`;
-            pool.query(sql_querry_removePriorityArray, (err, result) => {
-                if (err) {
-                    console.error("An error occurd in SQL Queery", err);
-                    return res.status(500).send('Database Error');
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const factoryId = process.env.RAJ_MANDIR_FACTORY_ID;
+            const userRights = decoded.id.rights;
+            console.log(userRights, userRights == 1, 'fdfsaf');
+            if (userRights == 1) {
+                const productId = req.body.productId;
+                const priorityArray = req.body.priorityArray;
+                const data = {
+                    productCategoryId: req.body.productCategoryId,
+                    productName: req.body.productName.trim(),
+                    gujaratiProductName: req.body.gujaratiProductName,
+                    minProductQty: req.body.minProductQty,
+                    minProductUnit: req.body.minProductUnit.trim(),
+                    leadTime: req.body.leadTime ? req.body.leadTime : 0,
+                    isExpired: req.body.isExpired,
+                    expiredDays: req.body.expiredDays ? req.body.expiredDays : 0
                 }
-                if (priorityArray.length != 0 && priorityArray) {
-                    let addPriorityData = priorityArray.map((item, index) => {
-                        let uniqueId = `PriorityId_${Date.now() + index}`; // Generating a unique ID using current timestamp
-                        let priorityNumber = index + 1; // Define Priority Number
-                        return `('${uniqueId}', '${productId}', ${priorityNumber}, '${item.bigUnitName}', ${item.unitNumber}, '${item.smallUnitName}')`;
-                    }).join(', ');
-                    console.log(addPriorityData);
-                    const sql_querry_addPriority = `INSERT INTO product_unit_preference (preferenceId, productId, priorityNumber, bigUnitName, unitNumber, smallUnitName)
-                                                    VALUES ${addPriorityData}`;
-                    pool.query(sql_querry_addPriority, (err, result) => {
+                if (!productId || !data.productName || !data.minProductQty || !data.minProductUnit) {
+                    return res.status(400).send("Please Fill All The Fields");
+                }
+                const sql_querry_updatedetails = `UPDATE inventory_product_data SET 
+                                                      productCategoryId = '${data.productCategoryId}',
+                                                      productName = '${data.productName}',
+                                                      gujaratiProductName = ${data.gujaratiProductName ? `'${data.gujaratiProductName}'` : null},
+                                                      minProductQty = ${data.minProductQty},
+                                                      minProductUnit = '${data.minProductUnit}',
+                                                      leadTime = ${data.leadTime},
+                                                      isExpired = ${data.isExpired},
+                                                      expiredDays = ${data.isExpired ? `${data.expiredDays}` : 0}
+                                                  WHERE productId = '${productId}'`;
+                pool.query(sql_querry_updatedetails, (err, data) => {
+                    if (err) {
+                        console.error("An error occurd in SQL Queery", err);
+                        return res.status(500).send('Database Error');
+                    }
+                    sql_querry_removePriorityArray = `DELETE FROM product_unit_preference WHERE productId = '${productId}'`;
+                    pool.query(sql_querry_removePriorityArray, (err, result) => {
                         if (err) {
                             console.error("An error occurd in SQL Queery", err);
                             return res.status(500).send('Database Error');
                         }
-                        return res.status(200).send("Product Update Successfully");
-                    });
-                } else {
-                    return res.status(200).send("Product Update Successfully");
-                }
-            })
-        })
+                        if (priorityArray.length != 0 && priorityArray) {
+                            let addPriorityData = priorityArray.map((item, index) => {
+                                let uniqueId = `PriorityId_${Date.now() + index}`; // Generating a unique ID using current timestamp
+                                let priorityNumber = index + 1; // Define Priority Number
+                                return `('${uniqueId}', '${productId}', ${priorityNumber}, '${item.bigUnitName}', ${item.unitNumber}, '${item.smallUnitName}')`;
+                            }).join(', ');
+                            console.log(addPriorityData);
+                            const sql_querry_addPriority = `INSERT INTO product_unit_preference (preferenceId, productId, priorityNumber, bigUnitName, unitNumber, smallUnitName)
+                                                    VALUES ${addPriorityData}`;
+                            pool.query(sql_querry_addPriority, (err, result) => {
+                                if (err) {
+                                    console.error("An error occurd in SQL Queery", err);
+                                    return res.status(500).send('Database Error');
+                                }
+                                return res.status(200).send("Product Update Successfully");
+                            });
+                        } else {
+                            return res.status(200).send("Product Update Successfully");
+                        }
+                    })
+                })
+            } else {
+                return res.status(400).send("You Are Not Authorised...!");
+            }
+        } else {
+            res.status(401).send("Please Login Firest.....!");
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');
@@ -1744,8 +1769,6 @@ const getCategoryWiseUsedByProduct = (req, res) => {
                     const datas = Object.values(JSON.parse(JSON.stringify(result)));
                     processDatas(datas)
                         .then((data) => {
-                            console.log('json 1', datas);
-                            console.log('json 2', data);
                             const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
                                 // console.log(data[index] && data[index].convertedQuantity)
                             ) : []
@@ -2175,8 +2198,6 @@ const exportExcelSheetForProductTable = (req, res) => {
                 const datas = Object.values(JSON.parse(JSON.stringify(rows)));
                 processDatas(datas)
                     .then((data) => {
-                        console.log('json 1', datas);
-                        console.log('json 2', data);
                         const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
                             // console.log(data[index] && data[index].convertedQuantity)
                         ) : []
@@ -3120,8 +3141,6 @@ const exportPdfForAllProductsData = (req, res) => {
                         const datas = Object.values(JSON.parse(JSON.stringify(rows)));
                         processDatas(datas)
                             .then((data) => {
-                                console.log('json 1', datas);
-                                console.log('json 2', data);
                                 const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity, allConversation: data[index].vikJson } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit, allConversation: data[index].vikJson },
                                     // console.log(data[index] && data[index].convertedQuantity)
                                 ) : []
