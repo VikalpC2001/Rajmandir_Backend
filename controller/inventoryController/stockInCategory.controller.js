@@ -162,6 +162,9 @@ const removestockInCategory = async (req, res) => {
             const rights = decoded.id.rights;
             if (rights == 1) {
                 const stockInCategoryId = req.query.stockInCategoryId.trim();
+                if (stockInCategoryId == 'sa') {
+                    return res.status(400).send('You Can Not Delet Static Category');
+                }
                 req.query.stockInCategoryId = pool.query(`SELECT stockInCategoryId FROM inventory_stockInCategory_data WHERE stockInCategoryId = '${stockInCategoryId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);

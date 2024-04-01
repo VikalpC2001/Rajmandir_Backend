@@ -716,7 +716,7 @@ const exportExcelSheetForAllRawMaterialsBySupplierId = (req, res) => {
                                         SELECT
                                             rawMaterialId,
                                             rmStockInDate,
-                                            rawMaterialQty,
+                                            CONCAT(rmStockInDisplayQty,' ',rmStockInDisplayUnit) AS rawMaterialQty,
                                             rawMaterialPrice
                                         FROM
                                             factory_rmStockIn_data
@@ -1083,7 +1083,7 @@ const exportPdfForAllRawMaterialsBySupplierId = (req, res) => {
                                         SELECT
                                             rawMaterialId,
                                             rmStockInDate,
-                                            rawMaterialQty,
+                                            CONCAT(rmStockInDisplayQty,' ',rmStockInDisplayUnit) AS rawMaterialQty,
                                             rawMaterialPrice
                                         FROM
                                             factory_rmStockIn_data

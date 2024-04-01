@@ -841,11 +841,10 @@ const fillEditRecipeeDataById = (req, res) => {
                                 }
                             })
                             ) : []
-
                             const recipeeJson = {
                                 recipeMaterial: rms,
                                 otherExpense: oms,
-                                produceProductda: mfs,
+                                produceProductdata: mfs,
                                 batchQty: recipee && recipee[3][0] ? recipee[3][0].batchQty : 0,
                                 batchUnit: recipee && recipee[3][0] ? recipee[3][0].batchUnit : null
                             }

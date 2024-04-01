@@ -769,14 +769,14 @@ const exportExcelSheetForRmDebitTransactionList = (req, res) => {
         pool.query(sql_queries_getdetails, async (err, rows) => {
             if (err) return res.status(404).send(err);
             const workbook = new excelJS.Workbook();  // Create a new workbook
-            const worksheet = workbook.addWorksheet("Debit Transaction"); // New Worksheet
+            const worksheet = workbook.addWorksheet("Transaction"); // New Worksheet
 
             if (req.query.startDate && req.query.endDate) {
                 worksheet.mergeCells('A1', 'I1');
-                worksheet.getCell('A1').value = `Debit Transaction : ${data.startDate} To ${data.endDate}`;
+                worksheet.getCell('A1').value = `Transaction : ${data.startDate} To ${data.endDate}`;
             } else {
                 worksheet.mergeCells('A1', 'I1');
-                worksheet.getCell('A1').value = `Debit Transaction : ${firstDay} To ${lastDay}`;
+                worksheet.getCell('A1').value = `Transaction : ${firstDay} To ${lastDay}`;
             }
 
             /*Column headers*/

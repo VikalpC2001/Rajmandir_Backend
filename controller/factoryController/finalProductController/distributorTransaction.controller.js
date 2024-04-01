@@ -572,6 +572,7 @@ const exportExcelForDistributorCashAndDebit = (req, res) => {
                                               mfso.mfProductOutPrice AS costPrice,
                                               fdwod.payType,
                                               fdwod.sellAmount,
+                                              fdwod.sellAmount - mfso.mfProductOutPrice AS profit,
                                               DATE_FORMAT(fdwod.sellDate,'%d-%M-%Y') AS sellDate,
                                               DATE_FORMAT(outDataCreationDate,'%h:%i %p') AS sellTime
                                           FROM
@@ -579,7 +580,6 @@ const exportExcelForDistributorCashAndDebit = (req, res) => {
                                           INNER JOIN user_details ON user_details.userId = fdwod.userId
                                           INNER JOIN factory_mfProductStockOut_data AS mfso ON mfso.mfStockOutId = fdwod.mfStockOutId
                                           INNER JOIN factory_manufactureProduct_data AS fmpd ON fmpd.mfProductId = fdwod.mfProductId`;
-
             if (req.query.startDate && req.query.endDate && req.query.payType && req.query.distributorId) {
                 sql_query_getDetails = `${sql_common_qurey}
                                                 WHERE distributorId = '${data.distributorId}' AND payType = '${data.payType}' AND sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
@@ -624,17 +624,18 @@ const exportExcelForDistributorCashAndDebit = (req, res) => {
                         worksheet.getCell('A1').value = `Transaction List`
 
                         /*Column headers*/
-                        worksheet.getRow(2).values = ['S no.', 'Entered By', 'Product', 'Quantity', 'Cost', 'Pay Type', 'Sell Price', 'Date', "Time"];
+                        worksheet.getRow(2).values = ['S no.', 'Entered By', 'Product', 'Quantity', 'Pay Type', 'Cost', 'Sell Price', 'Profit', 'Date', "Time"];
 
                         // Column for data in excel. key must match data key
                         worksheet.columns = [
                             { key: "s_no", width: 10, },
-                            { key: "enterBy", width: 20 },
+                            { key: "userName", width: 20 },
                             { key: "mfProductName", width: 30 },
                             { key: "qty", width: 20 },
-                            { key: "costPrice", width: 10 },
                             { key: "payType", width: 10 },
+                            { key: "costPrice", width: 10 },
                             { key: "sellAmount", width: 30 },
+                            { key: "profit", width: 30 },
                             { key: "sellDate", width: 20 },
                             { key: "sellTime", width: 20 },
                         ];
@@ -658,7 +659,7 @@ const exportExcelForDistributorCashAndDebit = (req, res) => {
                         });
                         worksheet.getRow(1).height = 30;
                         worksheet.getRow(2).height = 20;
-                        worksheet.getRow(arr.length + 3).values = ['Total:', '', '', '', { formula: `SUM(E3:E${arr.length + 2})` }, '', { formula: `SUM(G3:G${arr.length + 2})` }];
+                        worksheet.getRow(arr.length + 3).values = ['Total:', '', '', '', '', { formula: `SUM(F3:F${arr.length + 2})` }, { formula: `SUM(G3:G${arr.length + 2})` }, { formula: `SUM(H3:H${arr.length + 2})` }];
 
                         worksheet.getRow(arr.length + 3).eachCell((cell) => {
                             cell.font = { bold: true, size: 14 }
@@ -900,11 +901,11 @@ const exportPdfForDistributorCashAndDebit = (req, res) => {
                                           user_details.userName AS "Enter By",
                                           fmpd.mfProductName AS "Product Name",
                                           CONCAT(mfso.mfStockOutDisplayQty,' ',mfso.mfStockOutDisplayUnit) AS "Qty",
-                                          mfso.mfProductOutPrice AS "Cost",
                                           fdwod.payType AS "Pay Type",
+                                          mfso.mfProductOutPrice AS "Cost",
                                           fdwod.sellAmount AS "Sell Amount",
-                                          DATE_FORMAT(fdwod.sellDate,'%d-%M-%Y') AS "Date",
-                                          DATE_FORMAT(outDataCreationDate,'%h:%i %p') AS "Time"
+                                          fdwod.sellAmount - mfso.mfProductOutPrice AS "Profit",
+                                          DATE_FORMAT(fdwod.sellDate,'%d-%M-%Y') AS "Date"
                                       FROM
                                           factory_distributorWiseOut_data AS fdwod
                                       INNER JOIN user_details ON user_details.userId = fdwod.userId
@@ -950,8 +951,9 @@ const exportPdfForDistributorCashAndDebit = (req, res) => {
                     } else {
                         const abc = Object.values(JSON.parse(JSON.stringify(rows)));
                         const cost = abc.reduce((total, item) => total + (item['Cost'] || 0), 0);;
-                        const sell = abc.reduce((total, item) => total + (item['Sell Amount'] || 0), 0);;
-                        const sumFooterArray = ['Total', '', '', '', parseFloat(cost).toLocaleString('en-IN'), '', parseFloat(sell).toLocaleString('en-IN')];
+                        const sell = abc.reduce((total, item) => total + (item['Sell Amount'] || 0), 0);
+                        const Profit = abc.reduce((total, item) => total + (item['Profit'] || 0), 0);;
+                        const sumFooterArray = ['Total', '', '', '', '', parseFloat(cost).toLocaleString('en-IN'), parseFloat(sell).toLocaleString('en-IN'), parseFloat(Profit).toLocaleString('en-IN')];
 
                         let tableHeading = `Transaction List`;
 

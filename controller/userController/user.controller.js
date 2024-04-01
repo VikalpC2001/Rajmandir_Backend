@@ -179,7 +179,6 @@ const authUser = async (req, res) => {
             userName: req.body.userName,
             Password: req.body.Password
         }
-        console.log(">>>", user);
         const sql_querry_authuser = `SELECT userId, userRights, userFirstName, userLastName, userName, password, user_details.branchId AS branchId, branch_data.branchName AS branchName FROM user_details
                                      LEFT JOIN branch_data ON branch_data.branchId = user_details.branchId
                                      WHERE userName = '${user.userName}'`;

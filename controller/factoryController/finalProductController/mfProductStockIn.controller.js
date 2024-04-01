@@ -299,7 +299,7 @@ const addMfProductStockInData = async (req, res) => {
                                                     mfProductQty: e.usedValue,
                                                     productUnit: e.ppUnit,
                                                     mfProductOutCategory: ppOutCategory,
-                                                    rmStockOutComment: 'Auto StockOut',
+                                                    mfStockOutComment: 'Auto StockOut',
                                                     userId: userId,
                                                     mfStockOutDate: data.mfStockInDate
                                                 }
@@ -628,7 +628,7 @@ const exportExcelSheetForMfStockIn = (req, res) => {
                     { key: "enterBy", width: 20 },
                     { key: "productName", width: 30 },
                     { key: "Qty", width: 20 },
-                    { key: "productPrice", width: 10 },
+                    { key: "Price", width: 10 },
                     { key: "totalPrice", width: 10 },
                     { key: "comment", width: 30 },
                     { key: "mfStockInDate", width: 20 },
@@ -818,7 +818,7 @@ const exportPdfForMfStockIn = (req, res) => {
                     }
                     const abc = Object.values(JSON.parse(JSON.stringify(rows)));
                     const sumOfTotalPrice = abc.reduce((total, item) => total + (item['Total Price'] || 0), 0);;
-                    const sumFooterArray = ['Total', '', '', '', parseFloat(sumOfTotalPrice).toLocaleString('en-IN')];
+                    const sumFooterArray = ['Total', '', '', '', '', parseFloat(sumOfTotalPrice).toLocaleString('en-IN')];
                     if (req.query.startMonth && req.query.endMonth) {
                         tableHeading = `StockIn Data From ${data.startDate} To ${data.endDate}`;
                     } else {

@@ -35,6 +35,7 @@ router.get('/getRawMaterialsBySupplierId', protect, rmSupplierController.getRawM
 router.delete('/removeFactorySupplierDetails', protect, rmSupplierController.removeFactorySupplierDetails);
 router.post('/updateFactorySupplierDetails', protect, rmSupplierController.updateFactorySupplierDetails);
 router.get('/exportExcelSheetForAllRawMaterialsBySupplierId', protect, rmSupplierController.exportExcelSheetForAllRawMaterialsBySupplierId);
+router.get('/exportPdfForAllRawMaterialsBySupplierId', protect, rmSupplierController.exportPdfForAllRawMaterialsBySupplierId);
 
 // Raw Material Stock In Category Routs
 

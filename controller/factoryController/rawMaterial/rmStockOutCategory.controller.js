@@ -127,6 +127,9 @@ const removeRmStockOutCategory = async (req, res) => {
             const rights = decoded.id.rights;
             if (rights == 1) {
                 const stockOutCategoryId = req.query.stockOutCategoryId.trim();
+                if (stockOutCategoryId == process.env.AUTO_RMOUT_ID || stockOutCategoryId == process.env.OUT_BRANCH_ID || stockOutCategoryId == 'Regular') {
+                    return res.status(400).send('You Can Not Delet Static Category');
+                }
                 req.query.stockOutCategoryId = pool.query(`SELECT stockOutCategoryId FROM factory_rmStockOutCategory_data WHERE stockOutCategoryId = '${stockOutCategoryId}'`, (err, row) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);

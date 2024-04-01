@@ -366,15 +366,15 @@ const getCommonMfProductData = (req, res) => {
                 const data = {
                     startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
                     endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
-                    searchWord: req.query.mfProductId,
+                    searchWord: req.query.searchWord ? req.query.searchWord : '',
                 }
                 let sql_count_data = `SELECT count(*) as numRows FROM factory_manufactureProduct_data WHERE mfProductId IN(
                                                                                                             SELECT
-                                                                                                                COALESCE(fmfrd.mfProductId, NULL)
+                                                                                                                COALESCE(fmfrd.produceProductId, NULL)
                                                                                                             FROM
                                                                                                                 factory_mfProductRecipee_data AS fmfrd
                                                                                                             WHERE
-                                                                                                                fmfrd.mfProductId IN(
+                                                                                                                fmfrd.produceProductId IN(
                                                                                                                                     SELECT
                                                                                                                                         COALESCE(fmpd.mfProductId, NULL)
                                                                                                                                     FROM
@@ -383,6 +383,7 @@ const getCommonMfProductData = (req, res) => {
                                                                                                                                         fmpd.mfProductCategoryId = '${departmentId}'
                                                                                                                                   )
                                                                                                       ) AND mfProductName LIKE '%` + data.searchWord + `%'`;
+
                 pool.query(sql_count_data, (err, rows, fields) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
@@ -437,11 +438,11 @@ const getCommonMfProductData = (req, res) => {
                                                     WHERE
                                                         fmfd.mfProductId IN(
                                                         SELECT
-                                                            COALESCE(fmfpd.mfProductId, NULL)
+                                                            COALESCE(fmfpd.produceProductId, NULL)
                                                         FROM
                                                             factory_mfProductRecipee_data AS fmfpd
                                                         WHERE
-                                                            fmfd.mfProductId IN(
+                                                            fmfpd.produceProductId IN(
                                                             SELECT
                                                                 COALESCE(fmpd.mfProductId, NULL)
                                                             FROM
@@ -499,11 +500,11 @@ const getCommonMfProductData = (req, res) => {
                                                     WHERE
                                                         fmfd.mfProductId IN(
                                                         SELECT
-                                                            COALESCE(fmfpd.mfProductId, NULL)
+                                                            COALESCE(fmfpd.produceProductId, NULL)
                                                         FROM
                                                             factory_mfProductRecipee_data AS fmfpd
                                                         WHERE
-                                                            fmfd.mfProductId IN(
+                                                            fmfpd.produceProductId IN(
                                                             SELECT
                                                                 COALESCE(fmpd.mfProductId, NULL)
                                                             FROM
@@ -515,6 +516,7 @@ const getCommonMfProductData = (req, res) => {
                                                     AND fmfd.mfProductName LIKE '%` + data.searchWord + `%'
                                                     LIMIT ${limit}`;
                         }
+                        console.log(sql_query_getDetails)
                         pool.query(sql_query_getDetails, (err, rows) => {
                             if (err) {
                                 console.error("An error occurd in SQL Queery", err);
@@ -1030,11 +1032,11 @@ const exportExcelForCommonMfProductData = (req, res) => {
                                             WHERE
                                                 fmfd.mfProductId IN(
                                                 SELECT
-                                                    COALESCE(fmfpd.mfProductId, NULL)
+                                                    COALESCE(fmfpd.produceProductId, NULL)
                                                 FROM
                                                     factory_mfProductRecipee_data AS fmfpd
                                                 WHERE
-                                                    fmfd.mfProductId IN(
+                                                    fmfpd.produceProductId IN(
                                                     SELECT
                                                         COALESCE(fmpd.mfProductId, NULL)
                                                     FROM
@@ -1091,11 +1093,11 @@ const exportExcelForCommonMfProductData = (req, res) => {
                                             WHERE
                                                 fmfd.mfProductId IN(
                                                 SELECT
-                                                    COALESCE(fmfpd.mfProductId, NULL)
+                                                    COALESCE(fmfpd.produceProductId, NULL)
                                                 FROM
                                                     factory_mfProductRecipee_data AS fmfpd
                                                 WHERE
-                                                    fmfd.mfProductId IN(
+                                                    fmfpd.produceProductId IN(
                                                     SELECT
                                                         COALESCE(fmpd.mfProductId, NULL)
                                                     FROM
@@ -1657,11 +1659,11 @@ const exportPDFForCommonMfProductData = (req, res) => {
                                             WHERE
                                                 fmfd.mfProductId IN(
                                                 SELECT
-                                                    COALESCE(fmfpd.mfProductId, NULL)
+                                                    COALESCE(fmfpd.produceProductId, NULL)
                                                 FROM
                                                     factory_mfProductRecipee_data AS fmfpd
                                                 WHERE
-                                                    fmfd.mfProductId IN(
+                                                    fmfpd.produceProductId IN(
                                                     SELECT
                                                         COALESCE(fmpd.mfProductId, NULL)
                                                     FROM
@@ -1718,11 +1720,11 @@ const exportPDFForCommonMfProductData = (req, res) => {
                                             WHERE
                                                 fmfd.mfProductId IN(
                                                 SELECT
-                                                    COALESCE(fmfpd.mfProductId, NULL)
+                                                    COALESCE(fmfpd.produceProductId, NULL)
                                                 FROM
                                                     factory_mfProductRecipee_data AS fmfpd
                                                 WHERE
-                                                    fmfd.mfProductId IN(
+                                                    fmfpd.produceProductId IN(
                                                     SELECT
                                                         COALESCE(fmpd.mfProductId, NULL)
                                                     FROM

@@ -2952,7 +2952,7 @@ const exportPdfForMfProductData = (req, res) => {
                 const data = {
                     startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
                     endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
-                    mfProductStatus: req.query.mfProductStatus,
+                    mfProductStatus: req.query.productStatus,
                     mfProductCategoryId: departmentId
                 }
                 const sql_querry_staticQuery = `SELECT
@@ -3104,15 +3104,15 @@ const exportPdfForMfProductData = (req, res) => {
                                             ) AS siLu
                                             ON
                                                 p.mfProductId = siLu.mfProductId`;
-                if (req.query.mfProductStatus == 1) {
+                if (req.query.productStatus == 1) {
                     sql_queries_getdetails = `${sql_querry_staticQuery}
                                                 WHERE p.mfProductCategoryId = '${data.mfProductCategoryId}' AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) >= p.minMfProductQty 
                                                 ORDER BY p.mfProductName`;
-                } else if (req.query.mfProductStatus == 2) {
+                } else if (req.query.productStatus == 2) {
                     sql_queries_getdetails = `${sql_querry_staticQuery}
                                                 WHERE p.mfProductCategoryId = '${data.mfProductCategoryId}' AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) < p.minMfProductQty AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) != 0
                                                 ORDER BY p.mfProductName`;
-                } else if (req.query.mfProductStatus == 3) {
+                } else if (req.query.productStatus == 3) {
                     sql_queries_getdetails = `${sql_querry_staticQuery}
                                                 WHERE p.mfProductCategoryId = '${data.mfProductCategoryId}' AND COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) = 0
                                                 ORDER BY p.mfProductName`;
@@ -3302,7 +3302,7 @@ const exportExcelForOutCategoryWiseMfProductData = (req, res) => {
                     outCategoryId: req.query.outCategoryId,
                     branchId: req.query.branchId
                 }
-
+                console.log(data.outCategoryId, 'Milan');
                 if (req.query.outCategoryId == 'Branch' && req.query.branchId) {
                     sql_queries_getdetails = `SELECT
                                                   mfpd.mfProductId AS mfProductId,
@@ -3359,146 +3359,159 @@ const exportExcelForOutCategoryWiseMfProductData = (req, res) => {
                                                 ORDER BY mfpd.mfProductName ASC`;
                 } else if (req.query.outCategoryId) {
                     sql_queries_getdetails = `SELECT
-                                                  mfpd.mfProductId AS mfProductId,
-                                                  mfpd.mfProductName AS mfProductName,
-                                                  mfpd.minMfProductUnit AS minMfProductUnit,
-                                                  COALESCE(mfsod.qty, 0) AS remainingStock,
-                                                  COALESCE(mfsod.costPrice, 0) AS costPrice,
-                                                  COALESCE(fdwod.sellAmt,isid.selAmt,mfsod.costPrice,0) AS sellAmt,
-                                                  (COALESCE(mfsod.costPrice, 0))-(COALESCE(fdwod.sellAmt,isid.selAmt,mfsod.costPrice,0)) AS profit
-                                                FROM
-                                                    factory_manufactureProduct_data AS mfpd
-                                                  LEFT JOIN(
-                                                      SELECT
-                                                          mfso.mfProductId,
-                                                          SUM(mfso.mfProductQty) AS qty,
-                                                          SUM(mfso.mfProductOutPrice) AS costPrice
+                                                        mfpd.mfProductId AS mfProductId,
+                                                        mfpd.mfProductName AS mfProductName,
+                                                        mfpd.minMfProductUnit AS minMfProductUnit,
+                                                        COALESCE(mfsod.qty, 0) AS remainingStock,
+                                                        COALESCE(mfsod.costPrice, 0) AS costPrice,
+                                                        COALESCE(fdwod.sellAmt,isid.selAmt,autoWast.autoPrice,0) AS sellAmt,
+                                                        (COALESCE(fdwod.sellAmt,isid.selAmt,autoWast.autoPrice,0))-(COALESCE(mfsod.costPrice, 0)) AS profit
                                                       FROM
-                                                          factory_mfProductStockOut_data AS mfso
-                                                      WHERE
-                                                          mfso.mfProductOutCategory = '${data.outCategoryId}' AND
-                                                          ${req.query.startDate && req.query.endDate ? `mfso.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `mfso.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfso.mfStockOutDate <= CURDATE()`}
-                                                      GROUP BY
-                                                          mfso.mfProductId) AS mfsod
-                                                      ON
-                                                          mfpd.mfProductId = mfsod.mfProductId
-                                                  LEFT JOIN(
-                                                      SELECT
-                                                          fdow.mfProductId,
-                                                          SUM(fdow.sellAmount) AS sellAmt
-                                                      FROM
-                                                          factory_distributorWiseOut_data AS fdow
-                                                      WHERE
-                                                          fdow.mfStockOutId IN(
-                                                          SELECT
-                                                              COALESCE(msod.mfStockOutId, NULL)
-                                                          FROM
-                                                              factory_mfProductStockOut_data AS msod
-                                                          WHERE
-                                                              msod.mfProductOutCategory = '${data.outCategoryId}'
-                                                      ) AND 
-                                                      ${req.query.startDate && req.query.endDate ? `fdow.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `fdow.sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND fdow.sellDate <= CURDATE()`}
-                                                  GROUP BY
-                                                      fdow.mfProductId) AS fdwod
-                                                  ON
-                                                      mfpd.mfProductId = fdwod.mfProductId
-                                                  LEFT JOIN(
-                                                      SELECT
-                                                          isi.productId,
-                                                          SUM(isi.totalPrice) AS selAmt
-                                                      FROM
-                                                          inventory_stockIn_data AS isi
-                                                      WHERE
-                                                          isi.stockInId IN(
-                                                          SELECT
-                                                              COALESCE(msod.mfStockOutId, NULL)
-                                                          FROM
-                                                              factory_mfProductStockOut_data AS msod
-                                                          WHERE
-                                                              msod.mfProductOutCategory = '${data.outCategoryId}'
-                                                      ) AND 
-                                                      ${req.query.startDate && req.query.endDate ? `isi.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `isi.stockInDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND isi.stockInDate <= CURDATE()`}
-                                                  GROUP BY
-                                                      isi.productId) AS isid
-                                                  ON
-                                                      mfpd.mfProductId = isid.productId
-                                                  WHERE mfpd.mfProductCategoryId = '${departmentId}'
-                                                  ORDER BY mfpd.mfProductName ASC`;
-                } else {
-                    sql_queries_getdetails = `SELECT
-                                                    mfpd.mfProductId AS mfProductId,
-                                                    mfpd.mfProductName AS mfProductName,
-                                                    mfpd.minMfProductUnit AS minMfProductUnit,
-                                                    COALESCE(mfsod.qty, 0) AS remainingStock,
-                                                    COALESCE(mfsod.costPrice, 0) AS costPrice,
-                                                    ROUND(COALESCE(fdwod.sellAmt,0) + COALESCE(isid.selAmt,0) + COALESCE(autoWast.autoAndWastagePrice,0)) AS sellAmt,
-                                                    (COALESCE(mfsod.costPrice, 0))-(ROUND(COALESCE(fdwod.sellAmt,0) + COALESCE(isid.selAmt,0) + COALESCE(autoWast.autoAndWastagePrice,0))) AS profit
-                                                FROM
-                                                    factory_manufactureProduct_data AS mfpd
-                                                LEFT JOIN(
+                                                          factory_manufactureProduct_data AS mfpd
+                                                        LEFT JOIN(
                                                             SELECT
                                                                 mfsodAutoWast.mfProductId,
-                                                                SUM(mfsodAutoWast.mfProductOutPrice) AS autoAndWastagePrice
+                                                                SUM(mfsodAutoWast.mfProductOutPrice) AS autoPrice
                                                             FROM
                                                                 factory_mfProductStockOut_data AS mfsodAutoWast
                                                             WHERE
-                                                                mfsodAutoWast.mfProductOutCategory NOT IN ('Auto','Wastage') AND
+                                                                mfsodAutoWast.mfProductOutCategory IN ('${data.outCategoryId == 'Auto' ? 'Auto' : null}') AND
                                                                 ${req.query.startDate && req.query.endDate ? `mfsodAutoWast.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : ` mfsodAutoWast.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfsodAutoWast.mfStockOutDate <= CURDATE()`}
                                                             GROUP BY
                                                                 mfsodAutoWast.mfProductId) AS autoWast
                                                             ON
                                                                 mfpd.mfProductId = autoWast.mfProductId
-                                                LEFT JOIN(
-                                                      SELECT
-                                                          mfso.mfProductId,
-                                                          SUM(mfso.mfProductQty) AS qty,
-                                                          SUM(mfso.mfProductOutPrice) AS costPrice
+                                                        LEFT JOIN(
+                                                            SELECT
+                                                                mfso.mfProductId,
+                                                                SUM(mfso.mfProductQty) AS qty,
+                                                                SUM(mfso.mfProductOutPrice) AS costPrice
+                                                            FROM
+                                                                factory_mfProductStockOut_data AS mfso
+                                                            WHERE
+                                                                mfso.mfProductOutCategory = '${data.outCategoryId}' AND
+                                                                ${req.query.startDate && req.query.endDate ? `mfso.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `mfso.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfso.mfStockOutDate <= CURDATE()`}
+                                                            GROUP BY
+                                                                mfso.mfProductId) AS mfsod
+                                                            ON
+                                                                mfpd.mfProductId = mfsod.mfProductId
+                                                        LEFT JOIN(
+                                                            SELECT
+                                                                fdow.mfProductId,
+                                                                SUM(fdow.sellAmount) AS sellAmt
+                                                            FROM
+                                                                factory_distributorWiseOut_data AS fdow
+                                                            WHERE
+                                                                fdow.mfStockOutId IN(
+                                                                SELECT
+                                                                    COALESCE(msod.mfStockOutId, NULL)
+                                                                FROM
+                                                                    factory_mfProductStockOut_data AS msod
+                                                                WHERE
+                                                                    msod.mfProductOutCategory = '${data.outCategoryId}'
+                                                            ) AND 
+                                                            ${req.query.startDate && req.query.endDate ? `fdow.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `fdow.sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND fdow.sellDate <= CURDATE()`}
+                                                        GROUP BY
+                                                            fdow.mfProductId) AS fdwod
+                                                        ON
+                                                            mfpd.mfProductId = fdwod.mfProductId
+                                                        LEFT JOIN(
+                                                            SELECT
+                                                                isi.productId,
+                                                                SUM(isi.totalPrice) AS selAmt
+                                                            FROM
+                                                                inventory_stockIn_data AS isi
+                                                            WHERE
+                                                                isi.stockInId IN(
+                                                                SELECT
+                                                                    COALESCE(msod.mfStockOutId, NULL)
+                                                                FROM
+                                                                    factory_mfProductStockOut_data AS msod
+                                                                WHERE
+                                                                    msod.mfProductOutCategory = '${data.outCategoryId}'
+                                                            ) AND 
+                                                            ${req.query.startDate && req.query.endDate ? `isi.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `isi.stockInDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND isi.stockInDate <= CURDATE()`}
+                                                        GROUP BY
+                                                            isi.productId) AS isid
+                                                        ON
+                                                            mfpd.mfProductId = isid.productId
+                                                        WHERE mfpd.mfProductCategoryId = '${departmentId}'
+                                                        ORDER BY mfpd.mfProductName ASC`;
+                } else {
+                    sql_queries_getdetails = `SELECT
+                                                          mfpd.mfProductId AS mfProductId,
+                                                          mfpd.mfProductName AS mfProductName,
+                                                          mfpd.minMfProductUnit AS minMfProductUnit,
+                                                          COALESCE(mfsod.qty, 0) AS remainingStock,
+                                                          COALESCE(mfsod.costPrice, 0) AS costPrice,
+                                                          ROUND(COALESCE(fdwod.sellAmt,0) + COALESCE(isid.selAmt,0) + COALESCE(autoWast.autoPrice,0)) AS sellAmt,
+                                                          (ROUND(COALESCE(fdwod.sellAmt,0) + COALESCE(isid.selAmt,0)+ COALESCE(autoWast.autoPrice,0)))-(COALESCE(mfsod.costPrice, 0)) AS profit
                                                       FROM
-                                                          factory_mfProductStockOut_data AS mfso
-                                                      WHERE
-                                                          ${req.query.startDate && req.query.endDate ? `mfso.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `mfso.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfso.mfStockOutDate <= CURDATE()`}
+                                                          factory_manufactureProduct_data AS mfpd
+                                                      LEFT JOIN(
+                                                            SELECT
+                                                                mfsodAutoWast.mfProductId,
+                                                                SUM(mfsodAutoWast.mfProductOutPrice) AS autoPrice
+                                                            FROM
+                                                                factory_mfProductStockOut_data AS mfsodAutoWast
+                                                            WHERE
+                                                                mfsodAutoWast.mfProductOutCategory IN ('Auto') AND
+                                                                ${req.query.startDate && req.query.endDate ? `mfsodAutoWast.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : ` mfsodAutoWast.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfsodAutoWast.mfStockOutDate <= CURDATE()`}
+                                                            GROUP BY
+                                                                mfsodAutoWast.mfProductId) AS autoWast
+                                                            ON
+                                                                mfpd.mfProductId = autoWast.mfProductId
+                                                      LEFT JOIN(
+                                                            SELECT
+                                                                mfso.mfProductId,
+                                                                SUM(mfso.mfProductQty) AS qty,
+                                                                SUM(mfso.mfProductOutPrice) AS costPrice
+                                                            FROM
+                                                                factory_mfProductStockOut_data AS mfso
+                                                            WHERE
+                                                                ${req.query.startDate && req.query.endDate ? `mfso.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `mfso.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfso.mfStockOutDate <= CURDATE()`}
+                                                            GROUP BY
+                                                                mfso.mfProductId) AS mfsod
+                                                            ON
+                                                                mfpd.mfProductId = mfsod.mfProductId
+                                                      LEFT JOIN(
+                                                          SELECT
+                                                              fdow.mfProductId,
+                                                              SUM(fdow.sellAmount) AS sellAmt
+                                                          FROM
+                                                              factory_distributorWiseOut_data AS fdow
+                                                          WHERE
+                                                              fdow.mfStockOutId IN(
+                                                              SELECT
+                                                                  COALESCE(msod.mfStockOutId, NULL)
+                                                              FROM
+                                                                  factory_mfProductStockOut_data AS msod
+                                                          ) AND 
+                                                          ${req.query.startDate && req.query.endDate ? `fdow.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `fdow.sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND fdow.sellDate <= CURDATE()`}
                                                       GROUP BY
-                                                          mfso.mfProductId) AS mfsod
+                                                          fdow.mfProductId) AS fdwod
                                                       ON
-                                                          mfpd.mfProductId = mfsod.mfProductId
-                                                  LEFT JOIN(
-                                                      SELECT
-                                                          fdow.mfProductId,
-                                                          SUM(fdow.sellAmount) AS sellAmt
-                                                      FROM
-                                                          factory_distributorWiseOut_data AS fdow
-                                                      WHERE
-                                                          fdow.mfStockOutId IN(
+                                                          mfpd.mfProductId = fdwod.mfProductId
+                                                      LEFT JOIN(
                                                           SELECT
-                                                              COALESCE(msod.mfStockOutId, NULL)
+                                                              isi.productId,
+                                                              SUM(isi.totalPrice) AS selAmt
                                                           FROM
-                                                              factory_mfProductStockOut_data AS msod
-                                                      ) AND 
-                                                      ${req.query.startDate && req.query.endDate ? `fdow.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `fdow.sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND fdow.sellDate <= CURDATE()`}
-                                                  GROUP BY
-                                                      fdow.mfProductId) AS fdwod
-                                                  ON
-                                                      mfpd.mfProductId = fdwod.mfProductId
-                                                  LEFT JOIN(
-                                                      SELECT
-                                                          isi.productId,
-                                                          SUM(isi.totalPrice) AS selAmt
-                                                      FROM
-                                                          inventory_stockIn_data AS isi
-                                                      WHERE
-                                                          isi.stockInId IN(
-                                                          SELECT
-                                                              COALESCE(msod.mfStockOutId, NULL)
-                                                          FROM
-                                                              factory_mfProductStockOut_data AS msod
-                                                      ) AND 
-                                                      ${req.query.startDate && req.query.endDate ? `isi.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `isi.stockInDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND isi.stockInDate <= CURDATE()`}
-                                                  GROUP BY
-                                                      isi.productId) AS isid
-                                                  ON
-                                                      mfpd.mfProductId = isid.productId
-                                                  WHERE mfpd.mfProductCategoryId = '${departmentId}'
-                                                  ORDER BY mfpd.mfProductName ASC`;
+                                                              inventory_stockIn_data AS isi
+                                                          WHERE
+                                                              isi.stockInId IN(
+                                                              SELECT
+                                                                  COALESCE(msod.mfStockOutId, NULL)
+                                                              FROM
+                                                                  factory_mfProductStockOut_data AS msod
+                                                          ) AND 
+                                                          ${req.query.startDate && req.query.endDate ? `isi.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `isi.stockInDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND isi.stockInDate <= CURDATE()`}
+                                                      GROUP BY
+                                                          isi.productId) AS isid
+                                                      ON
+                                                          mfpd.mfProductId = isid.productId
+                                                      WHERE mfpd.mfProductCategoryId = '${departmentId}'
+                                                      ORDER BY mfpd.mfProductName ASC`;
                 }
                 pool.query(sql_queries_getdetails, (err, rows, fields) => {
                     if (err) {
@@ -3732,146 +3745,159 @@ const exportPdfForOutCategoryWiseMfProductData = (req, res) => {
                                                 ORDER BY mfpd.mfProductName ASC`;
                 } else if (req.query.outCategoryId) {
                     sql_queries_getdetails = `SELECT
-                                                  mfpd.mfProductId AS mfProductId,
-                                                  mfpd.mfProductName AS mfProductName,
-                                                  mfpd.minMfProductUnit AS minMfProductUnit,
-                                                  COALESCE(mfsod.qty, 0) AS remainingStock,
-                                                  COALESCE(mfsod.costPrice, 0) AS costPrice,
-                                                  COALESCE(fdwod.sellAmt,isid.selAmt,mfsod.costPrice,0) AS sellAmt,
-                                                  (COALESCE(mfsod.costPrice, 0))-(COALESCE(fdwod.sellAmt,isid.selAmt,mfsod.costPrice,0)) AS profit
-                                                FROM
-                                                    factory_manufactureProduct_data AS mfpd
-                                                  LEFT JOIN(
-                                                      SELECT
-                                                          mfso.mfProductId,
-                                                          SUM(mfso.mfProductQty) AS qty,
-                                                          SUM(mfso.mfProductOutPrice) AS costPrice
+                                                        mfpd.mfProductId AS mfProductId,
+                                                        mfpd.mfProductName AS mfProductName,
+                                                        mfpd.minMfProductUnit AS minMfProductUnit,
+                                                        COALESCE(mfsod.qty, 0) AS remainingStock,
+                                                        COALESCE(mfsod.costPrice, 0) AS costPrice,
+                                                        COALESCE(fdwod.sellAmt,isid.selAmt,autoWast.autoPrice,0) AS sellAmt,
+                                                        (COALESCE(fdwod.sellAmt,isid.selAmt,autoWast.autoPrice,0))-(COALESCE(mfsod.costPrice, 0)) AS profit
                                                       FROM
-                                                          factory_mfProductStockOut_data AS mfso
-                                                      WHERE
-                                                          mfso.mfProductOutCategory = '${data.outCategoryId}' AND
-                                                          ${req.query.startDate && req.query.endDate ? `mfso.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `mfso.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfso.mfStockOutDate <= CURDATE()`}
-                                                      GROUP BY
-                                                          mfso.mfProductId) AS mfsod
-                                                      ON
-                                                          mfpd.mfProductId = mfsod.mfProductId
-                                                  LEFT JOIN(
-                                                      SELECT
-                                                          fdow.mfProductId,
-                                                          SUM(fdow.sellAmount) AS sellAmt
-                                                      FROM
-                                                          factory_distributorWiseOut_data AS fdow
-                                                      WHERE
-                                                          fdow.mfStockOutId IN(
-                                                          SELECT
-                                                              COALESCE(msod.mfStockOutId, NULL)
-                                                          FROM
-                                                              factory_mfProductStockOut_data AS msod
-                                                          WHERE
-                                                              msod.mfProductOutCategory = '${data.outCategoryId}'
-                                                      ) AND 
-                                                      ${req.query.startDate && req.query.endDate ? `fdow.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `fdow.sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND fdow.sellDate <= CURDATE()`}
-                                                  GROUP BY
-                                                      fdow.mfProductId) AS fdwod
-                                                  ON
-                                                      mfpd.mfProductId = fdwod.mfProductId
-                                                  LEFT JOIN(
-                                                      SELECT
-                                                          isi.productId,
-                                                          SUM(isi.totalPrice) AS selAmt
-                                                      FROM
-                                                          inventory_stockIn_data AS isi
-                                                      WHERE
-                                                          isi.stockInId IN(
-                                                          SELECT
-                                                              COALESCE(msod.mfStockOutId, NULL)
-                                                          FROM
-                                                              factory_mfProductStockOut_data AS msod
-                                                          WHERE
-                                                              msod.mfProductOutCategory = '${data.outCategoryId}'
-                                                      ) AND 
-                                                      ${req.query.startDate && req.query.endDate ? `isi.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `isi.stockInDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND isi.stockInDate <= CURDATE()`}
-                                                  GROUP BY
-                                                      isi.productId) AS isid
-                                                  ON
-                                                      mfpd.mfProductId = isid.productId
-                                                  WHERE mfpd.mfProductCategoryId = '${departmentId}'
-                                                  ORDER BY mfpd.mfProductName ASC`;
-                } else {
-                    sql_queries_getdetails = `SELECT
-                                                    mfpd.mfProductId AS mfProductId,
-                                                    mfpd.mfProductName AS mfProductName,
-                                                    mfpd.minMfProductUnit AS minMfProductUnit,
-                                                    COALESCE(mfsod.qty, 0) AS remainingStock,
-                                                    COALESCE(mfsod.costPrice, 0) AS costPrice,
-                                                    ROUND(COALESCE(fdwod.sellAmt,0) + COALESCE(isid.selAmt,0) + COALESCE(autoWast.autoAndWastagePrice,0)) AS sellAmt,
-                                                    (COALESCE(mfsod.costPrice, 0))-(ROUND(COALESCE(fdwod.sellAmt,0) + COALESCE(isid.selAmt,0) + COALESCE(autoWast.autoAndWastagePrice,0))) AS profit
-                                                FROM
-                                                    factory_manufactureProduct_data AS mfpd
-                                                LEFT JOIN(
+                                                          factory_manufactureProduct_data AS mfpd
+                                                        LEFT JOIN(
                                                             SELECT
                                                                 mfsodAutoWast.mfProductId,
-                                                                SUM(mfsodAutoWast.mfProductOutPrice) AS autoAndWastagePrice
+                                                                SUM(mfsodAutoWast.mfProductOutPrice) AS autoPrice
                                                             FROM
                                                                 factory_mfProductStockOut_data AS mfsodAutoWast
                                                             WHERE
-                                                                mfsodAutoWast.mfProductOutCategory NOT IN ('Auto','Wastage') AND
+                                                                mfsodAutoWast.mfProductOutCategory IN ('${data.outCategoryId == 'Auto' ? 'Auto' : null}') AND
                                                                 ${req.query.startDate && req.query.endDate ? `mfsodAutoWast.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : ` mfsodAutoWast.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfsodAutoWast.mfStockOutDate <= CURDATE()`}
                                                             GROUP BY
                                                                 mfsodAutoWast.mfProductId) AS autoWast
                                                             ON
                                                                 mfpd.mfProductId = autoWast.mfProductId
-                                                LEFT JOIN(
-                                                      SELECT
-                                                          mfso.mfProductId,
-                                                          SUM(mfso.mfProductQty) AS qty,
-                                                          SUM(mfso.mfProductOutPrice) AS costPrice
+                                                        LEFT JOIN(
+                                                            SELECT
+                                                                mfso.mfProductId,
+                                                                SUM(mfso.mfProductQty) AS qty,
+                                                                SUM(mfso.mfProductOutPrice) AS costPrice
+                                                            FROM
+                                                                factory_mfProductStockOut_data AS mfso
+                                                            WHERE
+                                                                mfso.mfProductOutCategory = '${data.outCategoryId}' AND
+                                                                ${req.query.startDate && req.query.endDate ? `mfso.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `mfso.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfso.mfStockOutDate <= CURDATE()`}
+                                                            GROUP BY
+                                                                mfso.mfProductId) AS mfsod
+                                                            ON
+                                                                mfpd.mfProductId = mfsod.mfProductId
+                                                        LEFT JOIN(
+                                                            SELECT
+                                                                fdow.mfProductId,
+                                                                SUM(fdow.sellAmount) AS sellAmt
+                                                            FROM
+                                                                factory_distributorWiseOut_data AS fdow
+                                                            WHERE
+                                                                fdow.mfStockOutId IN(
+                                                                SELECT
+                                                                    COALESCE(msod.mfStockOutId, NULL)
+                                                                FROM
+                                                                    factory_mfProductStockOut_data AS msod
+                                                                WHERE
+                                                                    msod.mfProductOutCategory = '${data.outCategoryId}'
+                                                            ) AND 
+                                                            ${req.query.startDate && req.query.endDate ? `fdow.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `fdow.sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND fdow.sellDate <= CURDATE()`}
+                                                        GROUP BY
+                                                            fdow.mfProductId) AS fdwod
+                                                        ON
+                                                            mfpd.mfProductId = fdwod.mfProductId
+                                                        LEFT JOIN(
+                                                            SELECT
+                                                                isi.productId,
+                                                                SUM(isi.totalPrice) AS selAmt
+                                                            FROM
+                                                                inventory_stockIn_data AS isi
+                                                            WHERE
+                                                                isi.stockInId IN(
+                                                                SELECT
+                                                                    COALESCE(msod.mfStockOutId, NULL)
+                                                                FROM
+                                                                    factory_mfProductStockOut_data AS msod
+                                                                WHERE
+                                                                    msod.mfProductOutCategory = '${data.outCategoryId}'
+                                                            ) AND 
+                                                            ${req.query.startDate && req.query.endDate ? `isi.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `isi.stockInDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND isi.stockInDate <= CURDATE()`}
+                                                        GROUP BY
+                                                            isi.productId) AS isid
+                                                        ON
+                                                            mfpd.mfProductId = isid.productId
+                                                        WHERE mfpd.mfProductCategoryId = '${departmentId}'
+                                                        ORDER BY mfpd.mfProductName ASC`;
+                } else {
+                    sql_queries_getdetails = `SELECT
+                                                          mfpd.mfProductId AS mfProductId,
+                                                          mfpd.mfProductName AS mfProductName,
+                                                          mfpd.minMfProductUnit AS minMfProductUnit,
+                                                          COALESCE(mfsod.qty, 0) AS remainingStock,
+                                                          COALESCE(mfsod.costPrice, 0) AS costPrice,
+                                                          ROUND(COALESCE(fdwod.sellAmt,0) + COALESCE(isid.selAmt,0) + COALESCE(autoWast.autoPrice,0)) AS sellAmt,
+                                                          (ROUND(COALESCE(fdwod.sellAmt,0) + COALESCE(isid.selAmt,0)+ COALESCE(autoWast.autoPrice,0)))-(COALESCE(mfsod.costPrice, 0)) AS profit
                                                       FROM
-                                                          factory_mfProductStockOut_data AS mfso
-                                                      WHERE
-                                                          ${req.query.startDate && req.query.endDate ? `mfso.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `mfso.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfso.mfStockOutDate <= CURDATE()`}
+                                                          factory_manufactureProduct_data AS mfpd
+                                                      LEFT JOIN(
+                                                            SELECT
+                                                                mfsodAutoWast.mfProductId,
+                                                                SUM(mfsodAutoWast.mfProductOutPrice) AS autoPrice
+                                                            FROM
+                                                                factory_mfProductStockOut_data AS mfsodAutoWast
+                                                            WHERE
+                                                                mfsodAutoWast.mfProductOutCategory IN ('Auto') AND
+                                                                ${req.query.startDate && req.query.endDate ? `mfsodAutoWast.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : ` mfsodAutoWast.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfsodAutoWast.mfStockOutDate <= CURDATE()`}
+                                                            GROUP BY
+                                                                mfsodAutoWast.mfProductId) AS autoWast
+                                                            ON
+                                                                mfpd.mfProductId = autoWast.mfProductId
+                                                      LEFT JOIN(
+                                                            SELECT
+                                                                mfso.mfProductId,
+                                                                SUM(mfso.mfProductQty) AS qty,
+                                                                SUM(mfso.mfProductOutPrice) AS costPrice
+                                                            FROM
+                                                                factory_mfProductStockOut_data AS mfso
+                                                            WHERE
+                                                                ${req.query.startDate && req.query.endDate ? `mfso.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `mfso.mfStockOutDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND mfso.mfStockOutDate <= CURDATE()`}
+                                                            GROUP BY
+                                                                mfso.mfProductId) AS mfsod
+                                                            ON
+                                                                mfpd.mfProductId = mfsod.mfProductId
+                                                      LEFT JOIN(
+                                                          SELECT
+                                                              fdow.mfProductId,
+                                                              SUM(fdow.sellAmount) AS sellAmt
+                                                          FROM
+                                                              factory_distributorWiseOut_data AS fdow
+                                                          WHERE
+                                                              fdow.mfStockOutId IN(
+                                                              SELECT
+                                                                  COALESCE(msod.mfStockOutId, NULL)
+                                                              FROM
+                                                                  factory_mfProductStockOut_data AS msod
+                                                          ) AND 
+                                                          ${req.query.startDate && req.query.endDate ? `fdow.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `fdow.sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND fdow.sellDate <= CURDATE()`}
                                                       GROUP BY
-                                                          mfso.mfProductId) AS mfsod
+                                                          fdow.mfProductId) AS fdwod
                                                       ON
-                                                          mfpd.mfProductId = mfsod.mfProductId
-                                                  LEFT JOIN(
-                                                      SELECT
-                                                          fdow.mfProductId,
-                                                          SUM(fdow.sellAmount) AS sellAmt
-                                                      FROM
-                                                          factory_distributorWiseOut_data AS fdow
-                                                      WHERE
-                                                          fdow.mfStockOutId IN(
+                                                          mfpd.mfProductId = fdwod.mfProductId
+                                                      LEFT JOIN(
                                                           SELECT
-                                                              COALESCE(msod.mfStockOutId, NULL)
+                                                              isi.productId,
+                                                              SUM(isi.totalPrice) AS selAmt
                                                           FROM
-                                                              factory_mfProductStockOut_data AS msod
-                                                      ) AND 
-                                                      ${req.query.startDate && req.query.endDate ? `fdow.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `fdow.sellDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND fdow.sellDate <= CURDATE()`}
-                                                  GROUP BY
-                                                      fdow.mfProductId) AS fdwod
-                                                  ON
-                                                      mfpd.mfProductId = fdwod.mfProductId
-                                                  LEFT JOIN(
-                                                      SELECT
-                                                          isi.productId,
-                                                          SUM(isi.totalPrice) AS selAmt
-                                                      FROM
-                                                          inventory_stockIn_data AS isi
-                                                      WHERE
-                                                          isi.stockInId IN(
-                                                          SELECT
-                                                              COALESCE(msod.mfStockOutId, NULL)
-                                                          FROM
-                                                              factory_mfProductStockOut_data AS msod
-                                                      ) AND 
-                                                      ${req.query.startDate && req.query.endDate ? `isi.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `isi.stockInDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND isi.stockInDate <= CURDATE()`}
-                                                  GROUP BY
-                                                      isi.productId) AS isid
-                                                  ON
-                                                      mfpd.mfProductId = isid.productId
-                                                  WHERE mfpd.mfProductCategoryId = '${departmentId}'
-                                                  ORDER BY mfpd.mfProductName ASC`;
+                                                              inventory_stockIn_data AS isi
+                                                          WHERE
+                                                              isi.stockInId IN(
+                                                              SELECT
+                                                                  COALESCE(msod.mfStockOutId, NULL)
+                                                              FROM
+                                                                  factory_mfProductStockOut_data AS msod
+                                                          ) AND 
+                                                          ${req.query.startDate && req.query.endDate ? `isi.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')` : `isi.stockInDate >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) AND isi.stockInDate <= CURDATE()`}
+                                                      GROUP BY
+                                                          isi.productId) AS isid
+                                                      ON
+                                                          mfpd.mfProductId = isid.productId
+                                                      WHERE mfpd.mfProductCategoryId = '${departmentId}'
+                                                      ORDER BY mfpd.mfProductName ASC`;
                 }
                 pool.query(sql_queries_getdetails, (err, rows, fields) => {
                     if (err) {
@@ -3879,7 +3905,7 @@ const exportPdfForOutCategoryWiseMfProductData = (req, res) => {
                         return res.status(500).send('Database Error');;
                     } else {
                         if (rows.length == 0) {
-                            return res.status(200).send('No Data Found');
+                            return res.status(400).send('No Data Found');
                         } else {
                             const datas = Object.values(JSON.parse(JSON.stringify(rows)))
                             processDatas(datas)
@@ -3898,7 +3924,7 @@ const exportPdfForOutCategoryWiseMfProductData = (req, res) => {
                                     const cost = abc.reduce((total, item) => total + (item['Cost'] || 0), 0);;
                                     const sell = abc.reduce((total, item) => total + (item['Sell Amount'] || 0), 0);;
                                     const profit = abc.reduce((total, item) => total + (item['Profit'] || 0), 0);;
-                                    const sumFooterArray = ['Total', '', '', parseFloat(cost).toLocaleString('en-IN'), parseFloat(sell).toLocaleString('en-IN').parseFloat(profit).toLocaleString('en-IN')];
+                                    const sumFooterArray = ['Total', '', '', parseFloat(cost).toLocaleString('en-IN'), parseFloat(sell).toLocaleString('en-IN'), parseFloat(profit).toLocaleString('en-IN')];
                                     if (req.query.startMonth && req.query.endMonth) {
                                         tableHeading = `Product Profit & Sell From ${(req.query.startDate).slice(4, 15)} To ${(req.query.endDate).slice(4, 15)}`;
                                     } else {

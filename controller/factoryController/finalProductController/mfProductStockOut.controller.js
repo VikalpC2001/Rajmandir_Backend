@@ -105,7 +105,7 @@ const getMfStockOutList = async (req, res) => {
                         const numRows = rows[0].numRows;
                         const numPages = Math.ceil(numRows / numPerPage);
                         const commonQuery = `SELECT 
-                                                mfStockOutId, 
+                                                factory_mfProductStockOut_data.mfStockOutId,
                                                 user_details.userName AS outBy, 
                                                 CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS userName,
                                                 factory_manufactureProduct_data.mfProductName AS mfProductName, 
@@ -113,6 +113,11 @@ const getMfStockOutList = async (req, res) => {
                                                 mfStockOutDisplayUnit AS fillUnit, 
                                                 CONCAT(mfStockOutDisplayQty,' ',mfStockOutDisplayUnit) AS Quantity, 
                                                 ROUND(mfProductOutPrice) AS mfProductOutPrice, 
+                                                CASE
+                                                    WHEN factory_mfProductStockOut_data.mfProductOutCategory = 'Wastage' THEN 0
+                                                    WHEN factory_mfProductStockOut_data.mfProductOutCategory = 'Auto' THEN ROUND(mfProductOutPrice)
+                                                    ELSE COALESCE(dwo.sellAmount,isd.totalPrice,0)
+                                                END AS sellAmt,
                                                 factory_mfProductOutCategory_data.stockOutCategoryName AS stockOutCategoryName, 
                                                 mfStockOutComment, 
                                                 CONCAT(DATE_FORMAT(mfStockOutDate,'%d-%m-%Y'),' ',DATE_FORMAT(mfStockOutCreationDate, '%h:%i:%s %p')) AS mfStockOutDate 
@@ -120,6 +125,8 @@ const getMfStockOutList = async (req, res) => {
                                             INNER JOIN user_details ON user_details.userId = factory_mfProductStockOut_data.userId
                                             INNER JOIN factory_manufactureProduct_data ON factory_manufactureProduct_data.mfProductId = factory_mfProductStockOut_data.mfProductId
                                             INNER JOIN factory_mfProductOutCategory_data ON factory_mfProductOutCategory_data.stockOutCategoryId = factory_mfProductStockOut_data.mfProductOutCategory
+                                            LEFT JOIN factory_distributorWiseOut_data AS dwo ON dwo.mfStockOutId = factory_mfProductStockOut_data.mfStockOutId
+                                            LEFT JOIN inventory_stockIn_data AS isd ON isd.stockInId = factory_mfProductStockOut_data.mfStockOutId
                                             WHERE factory_mfProductStockOut_data.mfProductId IN (SELECT COALESCE(fmp.mfProductId, null) FROM factory_manufactureProduct_data AS fmp WHERE fmp.mfProductCategoryId = '${departmentId}')`;
                         if (req.query.mfProductId && req.query.startDate && req.query.endDate) {
                             sql_queries_getdetails = `${commonQuery}
@@ -1898,7 +1905,12 @@ const exportExcelSheetForMfStockOut = (req, res) => {
                                     CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS enterBy,
                                     factory_manufactureProduct_data.mfProductName AS mfProductName, 
                                     CONCAT(mfStockOutDisplayQty,' ',mfStockOutDisplayUnit) AS Qty,
-                                    ROUND(mfProductOutPrice) AS mfProductOutPrice, 
+                                    ROUND(mfProductOutPrice) AS mfProductOutPrice,
+                                    CASE
+                                        WHEN factory_mfProductStockOut_data.mfProductOutCategory = 'Wastage' THEN 0
+                                        WHEN factory_mfProductStockOut_data.mfProductOutCategory = 'Auto' THEN ROUND(mfProductOutPrice)
+                                        ELSE COALESCE(dwo.sellAmount,isd.totalPrice,0)
+                                    END AS sellAmt,
                                     factory_mfProductOutCategory_data.stockOutCategoryName AS stockOutCategoryName, 
                                     mfStockOutComment As comment, 
                                     DATE_FORMAT(mfStockOutDate,'%d-%m-%Y') AS mfStockOutDate,
@@ -1907,6 +1919,8 @@ const exportExcelSheetForMfStockOut = (req, res) => {
                                  INNER JOIN user_details ON user_details.userId = factory_mfProductStockOut_data.userId
                                  INNER JOIN factory_manufactureProduct_data ON factory_manufactureProduct_data.mfProductId = factory_mfProductStockOut_data.mfProductId
                                  INNER JOIN factory_mfProductOutCategory_data ON factory_mfProductOutCategory_data.stockOutCategoryId = factory_mfProductStockOut_data.mfProductOutCategory
+                                 LEFT JOIN factory_distributorWiseOut_data AS dwo ON dwo.mfStockOutId = factory_mfProductStockOut_data.mfStockOutId
+                                 LEFT JOIN inventory_stockIn_data AS isd ON isd.stockInId = factory_mfProductStockOut_data.mfStockOutId
                                  WHERE factory_mfProductStockOut_data.mfProductId IN (SELECT COALESCE(fmp.mfProductId, null) FROM factory_manufactureProduct_data AS fmp WHERE fmp.mfProductCategoryId = '${departmentId}')`;
             if (req.query.mfProductId && req.query.startDate && req.query.endDate) {
                 sql_queries_getdetails = `${commonQuery}
@@ -1938,7 +1952,7 @@ const exportExcelSheetForMfStockOut = (req, res) => {
                 }
 
                 /*Column headers*/
-                worksheet.getRow(2).values = ['S no.', 'Entered By', 'Product', 'Quantity', 'Out Price', 'Comment', 'Date', "Time"];
+                worksheet.getRow(2).values = ['S no.', 'Entered By', 'Product', 'Quantity', 'Production Cost', 'Sold Price', 'Comment', 'Date', "Time"];
 
                 // Column for data in excel. key must match data key
                 worksheet.columns = [
@@ -1947,9 +1961,10 @@ const exportExcelSheetForMfStockOut = (req, res) => {
                     { key: "mfProductName", width: 30 },
                     { key: "Qty", width: 20 },
                     { key: "mfProductOutPrice", width: 10 },
+                    { key: "sellAmt", width: 10 },
                     { key: "comment", width: 30 },
-                    { key: "mfStockInDate", width: 20 },
-                    { key: "mfStockInTime", width: 20 },
+                    { key: "mfStockOutDate", width: 20 },
+                    { key: "mfStockOutTime", width: 20 },
                 ];
                 //Looping through User data
                 const arr = rows
@@ -1972,7 +1987,7 @@ const exportExcelSheetForMfStockOut = (req, res) => {
                 });
                 worksheet.getRow(1).height = 30;
                 worksheet.getRow(2).height = 20;
-                worksheet.getRow(arr.length + 3).values = ['Total:', '', '', '', { formula: `SUM(E3:E${arr.length + 2})` }];
+                worksheet.getRow(arr.length + 3).values = ['Total:', '', '', '', { formula: `SUM(E3:E${arr.length + 2})` }, { formula: `SUM(F3:F${arr.length + 2})` }];
 
                 worksheet.getRow(arr.length + 3).eachCell((cell) => {
                     cell.font = { bold: true, size: 14 }
@@ -2086,7 +2101,12 @@ const exportPdfForMfStockOut = (req, res) => {
                                     CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS "Enter By",
                                     factory_manufactureProduct_data.mfProductName AS "Product Name", 
                                     CONCAT(mfStockOutDisplayQty,' ',mfStockOutDisplayUnit) AS "Qty",
-                                    ROUND(mfProductOutPrice) AS "Out Price", 
+                                    ROUND(mfProductOutPrice) AS "Production Cost",
+                                    CASE
+                                        WHEN factory_mfProductStockOut_data.mfProductOutCategory = 'Wastage' THEN 0
+                                        WHEN factory_mfProductStockOut_data.mfProductOutCategory = 'Auto' THEN ROUND(mfProductOutPrice)
+                                        ELSE COALESCE(dwo.sellAmount,isd.totalPrice,0)
+                                    END AS "Sold Price",
                                     factory_mfProductOutCategory_data.stockOutCategoryName AS "Category", 
                                     mfStockOutComment As "Comment", 
                                     DATE_FORMAT(mfStockOutDate,'%d-%m-%Y') AS "Date",
@@ -2095,6 +2115,8 @@ const exportPdfForMfStockOut = (req, res) => {
                                  INNER JOIN user_details ON user_details.userId = factory_mfProductStockOut_data.userId
                                  INNER JOIN factory_manufactureProduct_data ON factory_manufactureProduct_data.mfProductId = factory_mfProductStockOut_data.mfProductId
                                  INNER JOIN factory_mfProductOutCategory_data ON factory_mfProductOutCategory_data.stockOutCategoryId = factory_mfProductStockOut_data.mfProductOutCategory
+                                 LEFT JOIN factory_distributorWiseOut_data AS dwo ON dwo.mfStockOutId = factory_mfProductStockOut_data.mfStockOutId
+                                 LEFT JOIN inventory_stockIn_data AS isd ON isd.stockInId = factory_mfProductStockOut_data.mfStockOutId
                                  WHERE factory_mfProductStockOut_data.mfProductId IN (SELECT COALESCE(fmp.mfProductId, null) FROM factory_manufactureProduct_data AS fmp WHERE fmp.mfProductCategoryId = '${departmentId}')`;
                 if (req.query.mfProductId && req.query.startDate && req.query.endDate) {
                     sql_queries_getdetails = `${commonQuery}
@@ -2120,8 +2142,9 @@ const exportPdfForMfStockOut = (req, res) => {
                         return res.status(400).send('No Data Found');
                     }
                     const abc = Object.values(JSON.parse(JSON.stringify(rows)));
-                    const sumOfTotalPrice = abc.reduce((total, item) => total + (item['Out Price'] || 0), 0);;
-                    const sumFooterArray = ['Total', '', '', parseFloat(sumOfTotalPrice).toLocaleString('en-IN')];
+                    const sumOfTotalPrice = abc.reduce((total, item) => total + (item['Out Price'] || 0), 0);
+                    const soldPrice = abc.reduce((total, item) => total + (item['Sold Price'] || 0), 0);
+                    const sumFooterArray = ['Total', '', '', '', parseFloat(sumOfTotalPrice).toLocaleString('en-IN'), parseFloat(soldPrice).toLocaleString('en-IN')];
                     if (req.query.startMonth && req.query.endMonth) {
                         tableHeading = `StockOut Data From ${data.startDate} To ${data.endDate}`;
                     } else {

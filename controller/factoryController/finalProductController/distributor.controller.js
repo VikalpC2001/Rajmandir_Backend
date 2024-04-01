@@ -1,6 +1,9 @@
 const pool = require('../../../database');
 const jwt = require("jsonwebtoken");
 const { processDatas } = require("./mfConversation.controller");
+const excelJS = require("exceljs");
+const { jsPDF } = require('jspdf');
+require('jspdf-autotable');
 
 //Get Distributor Data API
 
@@ -646,7 +649,8 @@ const exportExcelSheetForAllProductDetailsByDistributorId = (req, res) => {
                                   fmp.minMfProductUnit AS minMfProductUnit,
                                   COALESCE(so.qty, 0) AS remainingStock,
                                   COALESCE(so.cost, 0) AS cost,
-                                  COALESCE(sod.totalSell, 0) AS totalSellPrice
+                                  COALESCE(sod.totalSell, 0) AS totalSellPrice,
+                                  COALESCE(sod.totalSell, 0) - COALESCE(so.cost, 0) AS profit
                               FROM
                                   factory_distributorProducts_data AS dpd
                               INNER JOIN factory_manufactureProduct_data AS fmp ON fmp.mfProductId = dpd.mfProductId`;
@@ -730,23 +734,24 @@ const exportExcelSheetForAllProductDetailsByDistributorId = (req, res) => {
                     const worksheet = workbook.addWorksheet("All Product"); // New Worksheet
 
                     if (req.query.startDate && req.query.endDate) {
-                        worksheet.mergeCells('A1', 'E1');
-                        worksheet.getCell('A1').value = `Supplier Wise Product List : ${(req.query.startDate).slice(4, 15)} To ${(req.query.endDate).slice(4, 15)}`;
+                        worksheet.mergeCells('A1', 'F1');
+                        worksheet.getCell('A1').value = `Distributor Wise Product List : ${(req.query.startDate).slice(4, 15)} To ${(req.query.endDate).slice(4, 15)}`;
                     } else {
-                        worksheet.mergeCells('A1', 'E1');
-                        worksheet.getCell('A1').value = `Supplier Wise Product List : ${firstDay} To ${lastDay}`;
+                        worksheet.mergeCells('A1', 'F1');
+                        worksheet.getCell('A1').value = `Distributor Wise Product List : ${firstDay} To ${lastDay}`;
                     }
 
                     /*Column headers*/
-                    worksheet.getRow(2).values = ['S no.', 'Product Name', 'Totoal Distribute', 'Total Cost', 'Sell Price'];
+                    worksheet.getRow(2).values = ['S no.', 'Product Name', 'Totoal Distribute', 'Production Cost', 'Sell Price', 'Profit'];
 
                     // Column for data in excel. key must match data key
                     worksheet.columns = [
                         { key: "s_no", width: 10, },
-                        { key: "Product Name", width: 30 },
+                        { key: "mfProductName", width: 30 },
                         { key: "remainingStock", width: 40 },
                         { key: "cost", width: 20 },
-                        { key: "totalSellPrice", width: 20 }
+                        { key: "totalSellPrice", width: 20 },
+                        { key: "profit", width: 20 }
                     ];
                     //Looping through User data
                     const arr = rows
@@ -768,7 +773,7 @@ const exportExcelSheetForAllProductDetailsByDistributorId = (req, res) => {
                     });
                     worksheet.getRow(1).height = 30;
                     worksheet.getRow(2).height = 20;
-                    worksheet.getRow(arr.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arr.length + 2})` }, { formula: `SUM(E3:E${arr.length + 2})` }];
+                    worksheet.getRow(arr.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arr.length + 2})` }, { formula: `SUM(E3:E${arr.length + 2})` }, { formula: `SUM(F3:F${arr.length + 2})` }];
 
                     worksheet.getRow(arr.length + 3).eachCell((cell) => {
                         cell.font = { bold: true, size: 14 }
@@ -896,7 +901,8 @@ const exportPdfForAllProductDetailsByDistributorId = (req, res) => {
                                   fmp.minMfProductUnit AS minMfProductUnit,
                                   COALESCE(so.qty, 0) AS remainingStock,
                                   COALESCE(so.cost, 0) AS cost,
-                                  COALESCE(sod.totalSell, 0) AS totalSellPrice
+                                  COALESCE(sod.totalSell, 0) AS totalSellPrice,
+                                  COALESCE(sod.totalSell, 0) - COALESCE(so.cost, 0) AS profit
                               FROM
                                   factory_distributorProducts_data AS dpd
                               INNER JOIN factory_manufactureProduct_data AS fmp ON fmp.mfProductId = dpd.mfProductId`;
@@ -986,16 +992,18 @@ const exportPdfForAllProductDetailsByDistributorId = (req, res) => {
                                     "Produc": e.mfProductName,
                                     "Totoal Distribute": e.remainingStock,
                                     "Cost": e.cost,
-                                    "Sell Price": e.totalSellPrice
+                                    "Sell Price": e.totalSellPrice,
+                                    "Profit": e.profit
                                 };
                             });
-                            const cost = abc.reduce((total, item) => total + (item['cost'] || 0), 0);
-                            const sellPrice = abc.reduce((total, item) => total + (item['Sell Price'] || 0), 0);;
-                            const sumFooterArray = ['Total', '', parseFloat(cost).toLocaleString('en-IN'), parseFloat(sellPrice).toLocaleString('en-IN')];
+                            const cost = abc.reduce((total, item) => total + (item['Cost'] || 0), 0);
+                            const sellPrice = abc.reduce((total, item) => total + (item['Sell Price'] || 0), 0);
+                            const Profit = abc.reduce((total, item) => total + (item['Profit'] || 0), 0);
+                            const sumFooterArray = ['Total', '', '', parseFloat(cost).toLocaleString('en-IN'), parseFloat(sellPrice).toLocaleString('en-IN'), parseFloat(Profit).toLocaleString('en-IN')];
                             if (req.query.startDate && req.query.endDate) {
-                                tableHeading = `Cash Transaction From ${(req.query.startDate).slice(4, 15)} To ${(req.query.endDate).slice(4, 15)}`;
+                                tableHeading = `Distributor Wise Product List From ${(req.query.startDate).slice(4, 15)} To ${(req.query.endDate).slice(4, 15)}`;
                             } else {
-                                tableHeading = `Cash Transaction From ${firstDay} To ${lastDay}`;
+                                tableHeading = `Distributor Wise Product List From ${firstDay} To ${lastDay}`;
                             }
 
                             createPDF(res, abc, sumFooterArray, tableHeading)
