@@ -18,6 +18,7 @@ router.post('/updateUserDetailsByOwner', protect, userController.updateUserDetai
 router.post('/addUserDetailsByBranchOwner', protect, userController.addUserDetailsByBranchOwner);
 router.post('/updateUserDetailsByBranchOwner', protect, userController.updateUserDetailsBranchOwner);
 router.get('/fillUserDetails', protect, userController.fillUserDetails);
+router.post('/chkPassword', protect, userController.chkPassword);
 
 // Unit Routs
 

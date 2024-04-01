@@ -2,6 +2,8 @@ const pool = require('../../../database');
 const excelJS = require("exceljs");
 const jwt = require("jsonwebtoken");
 const { processDatas } = require("./rmConversation.controller");
+const { jsPDF } = require('jspdf');
+require('jspdf-autotable');
 
 // Get Count List Supplier Wise
 
@@ -57,7 +59,6 @@ const getFactorySupplierCounterDetailsById = (req, res) => {
                                                    SELECT COUNT(rawMaterialId) AS numbreOfProduct FROM factory_supplierProducts_data WHERE rmSupplierId = '${data.rmSupplierId}';
                                                    ${sql_querry_remainAmount}`;
             }
-            console.log(sql_querry_getSupplierCount);
             pool.query(sql_querry_getSupplierCount, (err, data) => {
                 if (err) {
                     console.error("An error occurd in SQL Queery", err);
@@ -83,7 +84,6 @@ const getFactorySupplierCounterDetailsById = (req, res) => {
         res.status(500).json('Internal Server Error');
     }
 }
-
 // Get Product Details By Supplier Id
 
 const getRawMaterialsBySupplierId = async (req, res) => {
@@ -421,7 +421,6 @@ const getFactorySupplierdata = (req, res) => {
                                                           GROUP BY factory_supplierProducts_data.rmSupplierId 
                                                           ORDER BY sd.supplierFirmName LIMIT ${limit} `;
                     }
-                    console.log('>>>', sql_querry_getSupplierData);
                     pool.query(sql_querry_getSupplierData, (err, rows, fields) => {
                         if (err) {
                             console.error("An error occurd in SQL Queery", err);
@@ -951,7 +950,6 @@ const getFactorySupplierAllData = (req, res) => {
                                                     GROUP BY factory_supplierProducts_data.rmSupplierId 
                                                     ORDER BY sd.supplierFirmName LIMIT ${limit} `;
                 }
-                console.log('>>>', sql_querry_getSupplierData);
                 pool.query(sql_querry_getSupplierData, (err, rows, fields) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
@@ -978,6 +976,231 @@ const getFactorySupplierAllData = (req, res) => {
     }
 }
 
+// Export PDF Function
+
+async function createPDF(res, datas, sumFooterArray, tableHeading) {
+    try {
+        // Create a new PDF document
+        console.log(';;;;;;', datas);
+        console.log('?????', sumFooterArray);
+        console.log('?????', tableHeading);
+        const doc = new jsPDF();
+
+        // JSON data
+        const jsonData = datas;
+        // console.log(jsonData);
+
+        // Get the keys from the first JSON object to set as columns
+        const keys = Object.keys(jsonData[0]);
+
+        // Define columns for the auto table, including a "Serial No." column
+        const columns = [
+            { header: 'Sr.', dataKey: 'serialNo' }, // Add Serial No. column
+            ...keys.map(key => ({ header: key, dataKey: key }))
+        ]
+
+        // Convert JSON data to an array of arrays (table rows) and add a serial number
+        const data = jsonData.map((item, index) => [index + 1, ...keys.map(key => item[key]), '', '']);
+
+        // Initialize the sum columns with empty strings
+        if (sumFooterArray) {
+            data.push(sumFooterArray);
+        }
+
+        // Add auto table to the PDF document
+        doc.text(15, 15, tableHeading);
+        doc.autoTable({
+            startY: 20,
+            head: [columns.map(col => col.header)], // Extract headers correctly
+            body: data,
+            theme: 'grid',
+            styles: {
+                cellPadding: 2, // Add padding to cells for better appearance
+                halign: 'center', // Horizontally center-align content
+                fontSize: 10
+            },
+        });
+
+        const pdfBytes = await doc.output();
+        const fileName = 'jane-doe.pdf'; // Set the desired file name
+
+        // Set the response headers for the PDF download
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Type', 'application/pdf');
+
+        // Stream the PDF to the client for download
+        res.send(pdfBytes);
+
+
+        // Save the PDF to a file
+        // const pdfFilename = 'output.pdf';
+        // fs.writeFileSync(pdfFilename, doc.output());
+        // console.log(`PDF saved as ${pdfFilename}`);
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Export PDF Cash Transaction List
+
+const exportPdfForAllRawMaterialsBySupplierId = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+            var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+            var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+            const data = {
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                rmSupplierId: req.query.rmSupplierId,
+            }
+            const commaonQuery = `SELECT
+                                        sp.rawMaterialId,
+                                        pd.rawMaterialName,
+                                        COALESCE(si.total_quantity, 0) AS remainingStock,
+                                        COALESCE(si.total_expense, 0) AS totalExpense,
+                                        COALESCE(siLu.rawMaterialQty, 0) AS lastStockIN,
+                                        COALESCE(siLu.rawMaterialPrice, 0) AS lastUpdatedPrice,
+                                        COALESCE(DATE_FORMAT(siLu.rmStockInDate,'%d-%m-%Y'), 'No Update') AS lastStockdInAt,
+                                        pd.unit AS minRawMaterialUnit
+                                    FROM
+                                        factory_supplierProducts_data AS sp
+                                    INNER JOIN(
+                                        SELECT
+                                            factory_rawMaterial_data.rawMaterialId,
+                                        factory_rawMaterial_data.rawMaterialName,
+                                        factory_rawMaterial_data.minRawMaterialUnit AS unit
+                                        FROM
+                                            factory_rawMaterial_data
+                                    ) AS pd
+                                    ON
+                                    sp.rawMaterialId = pd.rawMaterialId
+                                    LEFT JOIN(
+                                        SELECT
+                                            rawMaterialId,
+                                            rmStockInDate,
+                                            rawMaterialQty,
+                                            rawMaterialPrice
+                                        FROM
+                                            factory_rmStockIn_data
+                                        WHERE
+                                            (rawMaterialId, rmStockInCreationDate) IN(
+                                                SELECT
+                                                rawMaterialId,
+                                                MAX(rmStockInCreationDate)
+                                            FROM
+                                                factory_rmStockIn_data
+                                            WHERE
+                                                factory_rmStockIn_data.rmSupplierId = '${data.rmSupplierId}'
+                                            GROUP BY
+                                                rawMaterialId
+                                            )
+                                    ) AS siLu
+                                    ON
+                                    sp.rawMaterialId = siLu.rawMaterialId`;
+            if (req.query.startDate && req.query.endDate) {
+                sql_querry_getAllProductBysupplier = `${commaonQuery}
+                                                        LEFT JOIN(
+                                                            SELECT
+                                                                factory_rmStockIn_data.rawMaterialId,
+                                                            ROUND(SUM(
+                                                                factory_rmStockIn_data.rawMaterialQty
+                                                            ),2) AS total_quantity,
+                                                            ROUND(SUM(
+                                                                factory_rmStockIn_data.totalPrice
+                                                            )) AS total_expense
+                                                            FROM
+                                                                factory_rmStockIn_data
+                                                            WHERE
+                                                                factory_rmStockIn_data.rmSupplierId = '${data.rmSupplierId}' AND factory_rmStockIn_data.rmStockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                            GROUP BY
+                                                                factory_rmStockIn_data.rawMaterialId
+                                                        ) AS si
+                                                        ON
+                                                        sp.rawMaterialId = si.rawMaterialId
+                                                        WHERE sp.rmSupplierId = '${data.rmSupplierId}'
+                                                        ORDER BY pd.rawMaterialName`;
+            } else {
+                sql_querry_getAllProductBysupplier = `${commaonQuery}
+                                                        LEFT JOIN(
+                                                              SELECT
+                                                                  factory_rmStockIn_data.rawMaterialId,
+                                                              ROUND(SUM(
+                                                                  factory_rmStockIn_data.rawMaterialQty
+                                                              ),2) AS total_quantity,
+                                                              ROUND(SUM(
+                                                                  factory_rmStockIn_data.totalPrice
+                                                              )) AS total_expense
+                                                              FROM
+                                                                factory_rmStockIn_data
+                                                              WHERE
+                                                                factory_rmStockIn_data.rmSupplierId = '${data.rmSupplierId}' AND factory_rmStockIn_data.rmStockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                              GROUP BY
+                                                                  factory_rmStockIn_data.rawMaterialId
+                                                          ) AS si
+                                                        ON
+                                                          sp.rawMaterialId = si.rawMaterialId
+                                                          WHERE sp.rmSupplierId = '${data.rmSupplierId}'
+                                                          ORDER BY pd.rawMaterialName`;
+            }
+            pool.query(sql_querry_getAllProductBysupplier, async (err, rows) => {
+                if (err) {
+                    console.error("An error occurd in SQL Queery", err);
+                    return res.status(500).send('Database Error');
+                } else if (rows && rows.length <= 0) {
+                    return res.status(400).send('No Data Found');
+                } else {
+                    const datas = Object.values(JSON.parse(JSON.stringify(rows)));
+                    await processDatas(datas)
+                        .then(async (data) => {
+                            const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
+                            ) : []
+                            const abc = rows.map(e => {
+                                return {
+                                    "Raw Material": e.rawMaterialName,
+                                    "Remain Stock": e.remainingStock,
+                                    "Expense": e.totalExpense,
+                                    "Last In": e.lastStockIN,
+                                    "Last Price": e.lastUpdatedPrice,
+                                    "Last In Date": e.lastStockdInAt,
+                                };
+                            });
+                            const sumPayAmount = abc.reduce((total, item) => total + (item['Expense'] || 0), 0);;
+                            const sumFooterArray = ['Total', '', '', parseFloat(sumPayAmount).toLocaleString('en-IN')];
+                            if (req.query.startDate && req.query.endDate) {
+                                tableHeading = `Cash Transaction From ${data.startDate} To ${data.endDate}`;
+                            } else {
+                                tableHeading = `Cash Transaction From ${firstDay} To ${lastDay}`;
+                            }
+
+                            createPDF(res, abc, sumFooterArray, tableHeading)
+                                .then(() => {
+                                    console.log('PDF created successfully');
+                                    res.status(200);
+                                })
+                                .catch((err) => {
+                                    console.log(err);
+                                    res.status(500).send('Error creating PDF');
+                                });
+                        }).catch(error => {
+                            console.error('Error in processing datas:', error);
+                            return res.status(500).send('Internal Error');
+                        });
+                }
+            });
+        } else {
+            return res.status(401).send('Pleasr Login Firest.....!');
+        }
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
 module.exports = {
     getFactorySupplierCounterDetailsById,
     getRawMaterialsBySupplierId,
@@ -989,6 +1212,7 @@ module.exports = {
     fillFactorySupplierDetails,
     updateFactorySupplierDetails,
     exportExcelSheetForAllRawMaterialsBySupplierId,
-    getFactorySupplierAllData
+    getFactorySupplierAllData,
+    exportPdfForAllRawMaterialsBySupplierId
 }
 

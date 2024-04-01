@@ -27,7 +27,6 @@ const addBranch = async (req, res) => {
 
         const uid1 = new Date();
         const branchId = String("branchId_" + uid1.getTime());
-        console.log("...", branchId);
 
         const data = {
             branchName: req.body.branchName.trim(),

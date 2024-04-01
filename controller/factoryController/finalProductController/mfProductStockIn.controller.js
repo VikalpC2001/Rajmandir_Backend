@@ -201,6 +201,7 @@ const addMfProductStockInData = async (req, res) => {
                 mfProductId: req.body.mfProductId,
                 mfProductQty: req.body.mfProductQty,
                 mfProductUnit: req.body.mfProductUnit,
+                batchQty: req.body.batchQty ? req.body.batchQty : 0,
                 totalPrice: req.body.totalPrice ? req.body.totalPrice : 0,
                 mfStockInComment: req.body.mfStockInComment ? req.body.mfStockInComment.trim() : null,
                 mfStockInDate: new Date(req.body.mfStockInDate ? req.body.mfStockInDate : null).toString().slice(4, 15),
@@ -227,6 +228,7 @@ const addMfProductStockInData = async (req, res) => {
                                                                                             mfStockInID,
                                                                                             userId,
                                                                                             mfProductId,
+                                                                                            batchQty,
                                                                                             mfProductQty,
                                                                                             mfProductPrice,
                                                                                             totalPrice,
@@ -239,6 +241,7 @@ const addMfProductStockInData = async (req, res) => {
                                                                                             '${mfStockInId}',
                                                                                             '${userId}',
                                                                                             '${data.mfProductId}',
+                                                                                            ${data.batchQty},
                                                                                             ${productFinalQty},
                                                                                             ${data.totalPrice / productFinalQty},
                                                                                             ${data.totalPrice},
@@ -246,8 +249,7 @@ const addMfProductStockInData = async (req, res) => {
                                                                                             '${data.mfProductUnit}',
                                                                                             ${data.mfStockInComment ? `'${data.mfStockInComment}'` : null},
                                                                                             ${productFinalQty},
-                                                                                            STR_TO_DATE('${data.mfStockInDate}','%b %d %Y')
-                                                                                            )`;
+                                                                                            STR_TO_DATE('${data.mfStockInDate}','%b %d %Y'))`;
                     pool.query(sql_querry_addStockIn, (err, raw) => {
                         if (err) {
                             console.error("An error occurd in SQL Queery", err);
@@ -255,14 +257,12 @@ const addMfProductStockInData = async (req, res) => {
                         }
                         if (data.isAuto) {
                             const autoJson = data.autoJson ? data.autoJson : null
-                            console.log(autoJson, '.....');
 
                             const recipeMaterial = autoJson && autoJson.recipeMaterial ? autoJson.recipeMaterial : [];
                             const otherExpense = autoJson && autoJson.otherExpense ? autoJson.otherExpense : [];
                             const produceProductdata = autoJson && autoJson.produceProductdata ? autoJson.produceProductdata : [];
 
                             const newRowMaterialJson = recipeMaterial.map((e, i) => {
-                                console.log(e, ';;;;;;;;')
                                 let jesu = {
                                     rmStockOutId: String("stockOut_" + Number(uid1.getTime() + i)),
                                     rawMaterialId: e.rawMaterialId,
@@ -310,21 +310,21 @@ const addMfProductStockInData = async (req, res) => {
                                                 .then(response => {
                                                     console.log("response", response);
                                                     let sql_queries_getUsedCost = `-- CALCULATE RAW MATERIAL USED PRICE
-                                                            SELECT COALESCE(SUM(rsod.rmStockOutPrice),0) AS usedRmStockOutPrice FROM factory_rmStockOut_data AS rsod
-                                                            WHERE rsod.rmStockOutId IN (SELECT 
-                                                                                            COALESCE(srsd.rmStockOutId,null) 
-                                                                                        FROM 
-                                                                                            factory_mfStockInWiseRmStockOut_data AS srsd 
-                                                                                        WHERE srsd.mfStockInId = '${mfStockInId}');
-                                                       -- CALCULATE OTHER SOURCE USED PRICE
-                                                            SELECT COALESCE(SUM(usedSourcePrice),0) AS usedOtherSourcePrice FROM factory_otherSourceUsed_data WHERE mfStockInId = '${mfStockInId}';
-                                                       -- CALCULATE MANUFACTURE PRODUCT USED PRICE
-                                                            SELECT COALESCE(SUM(mfsod.mfProductOutPrice),0) AS usedMfStockOutPrice FROM factory_mfProductStockOut_data AS mfsod
-                                                            WHERE mfsod.mfStockOutId IN(SELECT
-                                                                                            COALESCE(mfrsd.mfStockOutId, NULL)
-                                                                                        FROM
-                                                                                            factory_mfStockInWiseMfStockOut_data AS mfrsd
-                                                                                        WHERE mfrsd.mfStockInId = '${mfStockInId}')`;
+                                                                                        SELECT COALESCE(SUM(rsod.rmStockOutPrice),0) AS usedRmStockOutPrice FROM factory_rmStockOut_data AS rsod
+                                                                                        WHERE rsod.rmStockOutId IN (SELECT 
+                                                                                                                        COALESCE(srsd.rmStockOutId,null) 
+                                                                                                                    FROM 
+                                                                                                                        factory_mfStockInWiseRmStockOut_data AS srsd 
+                                                                                                                    WHERE srsd.mfStockInId = '${mfStockInId}');
+                                                                                   -- CALCULATE OTHER SOURCE USED PRICE
+                                                                                        SELECT COALESCE(SUM(usedSourcePrice),0) AS usedOtherSourcePrice FROM factory_otherSourceUsed_data WHERE mfStockInId = '${mfStockInId}';
+                                                                                   -- CALCULATE MANUFACTURE PRODUCT USED PRICE
+                                                                                        SELECT COALESCE(SUM(mfsod.mfProductOutPrice),0) AS usedMfStockOutPrice FROM factory_mfProductStockOut_data AS mfsod
+                                                                                        WHERE mfsod.mfStockOutId IN(SELECT
+                                                                                                                        COALESCE(mfrsd.mfStockOutId, NULL)
+                                                                                                                    FROM
+                                                                                                                        factory_mfStockInWiseMfStockOut_data AS mfrsd
+                                                                                                                    WHERE mfrsd.mfStockInId = '${mfStockInId}')`;
                                                     pool.query(sql_queries_getUsedCost, (err, cost) => {
                                                         if (err) {
                                                             console.error("An error occurd in SQL Queery", err);
@@ -443,224 +443,6 @@ const removeMfProductStockInData = (req, res) => {
     }
 }
 
-// Update Manufacture Product Stock IN
-
-const updateMfProductStockInData = (req, res) => {
-    try {
-        let token;
-        token = req.headers && req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
-        if (token) {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            const userId = decoded.id.id;
-            const uid1 = new Date();
-            const mfStockInId = req.body.mfStockInId;
-            const outCategory = process.env.AUTO_RMOUT_ID;;
-            const data = {
-                mfProductId: req.body.mfProductId,
-                mfProductQty: req.body.mfProductQty,
-                mfProductUnit: req.body.mfProductUnit,
-                totalPrice: req.body.totalPrice ? req.body.totalPrice : 0,
-                mfStockInComment: req.body.mfStockInComment ? req.body.mfStockInComment.trim() : null,
-                mfStockInDate: new Date(req.body.mfStockInDate ? req.body.mfStockInDate : null).toString().slice(4, 15),
-                isAuto: req.body.isAuto ? req.body.isAuto : false,
-                autoJson: req.body.autoJson ? req.body.autoJson : []
-            }
-            console.log(data.isAuto, 'dfasfasfasfa');
-            if (!data.mfProductId || !data.mfProductQty || !data.mfProductUnit || !data.mfStockInDate) {
-                res.status(404).send("Please Fill All The Fields");
-            }
-            const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM mfProduct_unit_preference WHERE mfProductId = '${data.mfProductId}' ORDER BY mfProduct_unit_preference.priorityNumber ASC;
-                                             SELECT mfpd.minMfProductUnit AS  minProductUnit FROM factory_manufactureProduct_data AS mfpd WHERE mfpd.mfProductId = '${data.mfProductId}'`;
-            pool.query(sql_queries_getNeedData, (err, result) => {
-                if (err) {
-                    console.error("An error occurd in SQL Queery", err);
-                    return res.status(500).send('Database Error');
-                }
-                const needData = {
-                    unitsData: result && result[0] ? Object.values(JSON.parse(JSON.stringify(result[0]))) : null,
-                    toUnit: result && result[1][0] && result[1][0].minProductUnit ? result[1][0].minProductUnit : null,
-                }
-                console.log(needData.unitsData);
-                const productFinalQty = (needData.unitsData && needData.unitsData.length !== 0) ? convertUnits(needData.unitsData, data.mfProductQty, data.mfProductUnit, needData.toUnit) : data.mfProductQty;
-                const sql_querry_addStockIn = `UPDATE
-                                                    factory_mfProductStockIn_data
-                                                SET
-                                                    userId = '${userId}',
-                                                    mfProductId = '${data.mfProductId}',
-                                                    mfProductQty = ${productFinalQty},
-                                                    mfProductPrice = ${data.totalPrice / productFinalQty},
-                                                    totalPrice = ${data.totalPrice},
-                                                    mfStockInDisplayQty =  ${data.mfProductQty},
-                                                    mfStockInDisplayUnit = '${data.mfProductUnit}',
-                                                    mfStockInComment = ${data.mfStockInComment ? `'${data.mfStockInComment}'` : null},
-                                                    remainingQty = ${productFinalQty},
-                                                    mfStockInDate = STR_TO_DATE('${data.mfStockInDate}','%b %d %Y')
-                                                WHERE mfStockInID = '${mfStockInId}'`;
-                pool.query(sql_querry_addStockIn, (err, raw) => {
-                    if (err) {
-                        console.error("An error occurd in SQL Queery", err);
-                        return res.status(500).send('Database Error');
-                    }
-                    const sql_query_getJesu = `SELECT rmStockOutId  FROM factory_mfStockInWiseRmStockOut_data WHERE mfStockInId = '${mfStockInId}';
-                                               SELECT mfStockOutId FROM factory_mfProductInwiseOut_data WHERE mfStockInId = '${mfStockInId}'`;
-                    pool.query(sql_query_getJesu, (err, ids) => {
-                        if (err) {
-                            console.error("An error occurd in SQL Queery", err);
-                            return res.status(500).send('Database Error');
-                        }
-
-                        const rawMaterialsId = ids && ids[0].length ? ids[0].map(item => item.rmStockOutId) : [];
-                        const mfProductsId = ids && ids[1].length ? ids[1].map(item => item.mfStockOutId) : [];
-
-                        if (rawMaterialsId && rawMaterialsId.length) {
-                            removeRmStockIn(rawMaterialsId);
-                        }
-                        if (mfProductsId && mfProductsId.length) {
-                            removeMfStockIn(rawMaterialsId);
-                        }
-
-                        const sql_querry_removedetails = `DELETE FROM factory_otherSourceUsed_data WHERE mfStockInId = '${mfStockInId}'`;
-                        pool.query(sql_querry_removedetails, (err, result) => {
-                            if (err) {
-                                console.error("An error occurd in SQL Queery", err);
-                                return res.status(500).send('Database Error');
-                            }
-                            if (data.isAuto) {
-                                const autoJson = data.autoJson ? data.autoJson : null
-
-                                const recipeMaterial = autoJson && autoJson.recipeMaterial ? autoJson.recipeMaterial : [];
-                                const otherExpense = autoJson && autoJson.otherExpense ? autoJson.otherExpense : [];
-                                const produceProductdata = autoJson && autoJson.produceProductdata ? autoJson.produceProductdata : [];
-
-                                const newRowMaterialJson = recipeMaterial.map((e, i) => {
-                                    console.log('joto', e);
-                                    let jesu = {
-                                        rmStockOutId: String("stockOut_" + Number(uid1.getTime() + i)),
-                                        rawMaterialId: e.rawMaterialId,
-                                        rawMaterialQty: e.usedMaterial,
-                                        rawMaterialUnit: e.rmUnit,
-                                        rmStockOutCategory: outCategory,
-                                        rmStockOutComment: 'Auto StockOut',
-                                        userId: userId,
-                                        rmStockOutDate: data.mfStockInDate
-                                    }
-                                    return jesu;
-                                })
-
-                                addRmStockOutDetailsAutoPromise(newRowMaterialJson, mfStockInId)
-                                    .then(response => {
-                                        const newOtherSourcelJson = otherExpense.map((e, i) => {
-                                            let jesu = {
-                                                usedSourceId: String("usedSource_" + Number(uid1.getTime() + i)),
-                                                userId: userId,
-                                                otherSourceId: e.otherSourceId,
-                                                usedSourceQty: e.usedSource,
-                                                usedSourcePrice: e.usedPrice,
-                                                usedSourceDate: data.mfStockInDate,
-                                                mfStockInId: mfStockInId,
-                                            }
-                                            return jesu;
-                                        })
-                                        addOtherSourceDataPromise(newOtherSourcelJson)
-                                            .then(response => {
-                                                const newProduceProductJson = produceProductdata.map((e, i) => {
-                                                    let jesu = {
-                                                        mfStockOutId: String("stockOut_" + Number(uid1.getTime() + i)),
-                                                        mfProductId: e.produceProductId,
-                                                        mfProductQty: e.usedValue,
-                                                        productUnit: e.ppUnit,
-                                                        mfProductOutCategory: ppOutCategory,
-                                                        rmStockOutComment: 'Auto StockOut',
-                                                        userId: userId,
-                                                        mfStockOutDate: data.mfStockInDate
-                                                    }
-                                                    return jesu;
-                                                })
-                                                console.log('.....', newProduceProductJson, produceProductdata)
-                                                addMfStockOutDetailsAutoPromise(newProduceProductJson, mfStockInId)
-                                                    .then(response => {
-                                                        console.log("response", response);
-                                                        let sql_queries_getUsedCost = `-- CALCULATE RAW MATERIAL USED PRICE
-                                                                                            SELECT COALESCE(SUM(rsod.rmStockOutPrice),0) AS usedRmStockOutPrice FROM factory_rmStockOut_data AS rsod
-                                                                                            WHERE rsod.rmStockOutId IN (SELECT 
-                                                                                                                            COALESCE(srsd.rmStockOutId,null) 
-                                                                                                                        FROM 
-                                                                                                                            factory_mfStockInWiseRmStockOut_data AS srsd 
-                                                                                                                        WHERE srsd.mfStockInId = '${mfStockInId}');
-                                                                                       -- CALCULATE OTHER SOURCE USED PRICE
-                                                                                            SELECT COALESCE(SUM(usedSourcePrice),0) AS usedOtherSourcePrice FROM factory_otherSourceUsed_data WHERE mfStockInId = '${mfStockInId}';
-                                                                                       -- CALCULATE MANUFACTURE PRODUCT USED PRICE
-                                                                                            SELECT COALESCE(SUM(mfsod.mfProductOutPrice),0) AS usedMfStockOutPrice FROM factory_mfProductStockOut_data AS mfsod
-                                                                                            WHERE mfsod.mfStockOutId IN(SELECT
-                                                                                                                            COALESCE(mfrsd.mfStockOutId, NULL)
-                                                                                                                        FROM
-                                                                                                                            factory_mfStockInWiseMfStockOut_data AS mfrsd
-                                                                                                                        WHERE mfrsd.mfStockInId = '${mfStockInId}')`;
-                                                        pool.query(sql_queries_getUsedCost, (err, cost) => {
-                                                            if (err) {
-                                                                console.error("An error occurd in SQL Queery", err);
-                                                                return res.status(500).send('Database Error');
-                                                            }
-                                                            const usedRmStockOutPrice = cost && cost[0].length ? cost[0][0].usedRmStockOutPrice : 0;
-                                                            const usedOtherSourcePrice = cost && cost[1].length ? cost[1][0].usedOtherSourcePrice : 0;
-                                                            const usedMfStockOutPrice = cost && cost[2].length ? cost[2][0].usedMfStockOutPrice : 0;
-                                                            const eastimateCost = usedRmStockOutPrice + usedOtherSourcePrice + usedMfStockOutPrice
-
-                                                            const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM mfProduct_unit_preference WHERE mfProductId = '${data.mfProductId}' ORDER BY mfProduct_unit_preference.priorityNumber ASC;
-                                                             SELECT mfpd.minMfProductUnit AS  minProductUnit FROM factory_manufactureProduct_data AS mfpd WHERE mfpd.mfProductId = '${data.mfProductId}'`;
-                                                            pool.query(sql_queries_getNeedData, (err, result) => {
-                                                                if (err) {
-                                                                    console.error("An error occurd in SQL Queery", err);
-                                                                    return res.status(500).send('Database Error');
-                                                                }
-                                                                const needData = {
-                                                                    unitsData: result && result[0] ? Object.values(JSON.parse(JSON.stringify(result[0]))) : null,
-                                                                    toUnit: result && result[1][0] && result[1][0].minProductUnit ? result[1][0].minProductUnit : null,
-                                                                }
-                                                                console.log(needData.unitsData);
-                                                                const productFinalQty = (needData.unitsData && needData.unitsData.length !== 0) ? convertUnits(needData.unitsData, data.mfProductQty, data.mfProductUnit, needData.toUnit) : data.mfProductQty;
-                                                                const productPrice = eastimateCost / productFinalQty;
-                                                                const sql_querry_updatePrice = `UPDATE
-                                                                    factory_mfProductStockIn_data
-                                                                SET
-                                                                    mfProductPrice = ${productPrice},
-                                                                    totalPrice = ${eastimateCost}
-                                                                WHERE mfStockInID = '${mfStockInId}'`;
-                                                                pool.query(sql_querry_updatePrice, (err, data) => {
-                                                                    if (err) {
-                                                                        console.error("An error occurd in SQL Queery", err);
-                                                                        return res.status(500).send('Database Error');
-                                                                    }
-                                                                    return res.status(200).send("Data Updated Successfully");
-                                                                })
-                                                            })
-                                                        })
-                                                    }).catch(error => {
-                                                        console.error('error', error); // Handle any errors
-                                                    })
-                                            }).catch(error => {
-                                                console.error(error); // Handle any errors
-                                            });
-                                    }).catch(error => {
-                                        console.error(error); // Handle any errors
-                                    });
-                            } else {
-                                return res.status(200).send("Data Updated Successfully");
-                            }
-                        })
-                    })
-
-                })
-            })
-        } else {
-            res.status(401).send("Please Login Firest.....!");
-        }
-    } catch (error) {
-        console.error('An error occurd', error);
-        res.status(500).json('Internal Server Error');
-    }
-}
-
 // Fill Manufacture Products Stock In Data
 
 const fillMfProductStockInData = (req, res) => {
@@ -673,6 +455,7 @@ const fillMfProductStockInData = (req, res) => {
                                          mfStockInID AS mfStockInId,
                                          factory_mfProductStockIn_data.mfProductId,
                                          fmpd.mfProductName,
+                                         batchQty,
                                          mfProductPrice,
                                          totalPrice,
                                          mfStockInDisplayQty,
@@ -1068,7 +851,6 @@ const exportPdfForMfStockIn = (req, res) => {
 module.exports = {
     addMfProductStockInData,
     removeMfProductStockInData,
-    updateMfProductStockInData,
     getmfProductStockInList,
     fillMfProductStockInData,
     exportExcelSheetForMfStockIn,

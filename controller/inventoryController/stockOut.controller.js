@@ -292,7 +292,7 @@ const addStockOutDetails = async (req, res) => {
 
                                     data.forEach((item) => {
                                         const { stockInId, stockInQuantity } = item;
-                                        query += `    WHEN stockInId = '${stockInId}' THEN ROUND(${stockInQuantity},2)\n`;
+                                        query += `    WHEN stockInId = '${stockInId}' THEN ROUND(${stockInQuantity},4)\n`;
                                     });
 
                                     query += '    ELSE remainingQty\nEND\n';
@@ -336,7 +336,7 @@ const addStockOutDetails = async (req, res) => {
                                         console.log('orignalStockInData', remainingStockByIds);
                                         console.log('stockInData', remainingStockByIds1);
 
-                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                         console.log(';;;;;;;;', stockInData)
                                         console.log('???????', orignalStockInData);
@@ -379,7 +379,6 @@ const addStockOutDetails = async (req, res) => {
 // Remove StockOut API
 
 const removeStockOutTransaction = async (req, res) => {
-
     try {
         const stockOutId = req.query.stockOutId
         req.query.stockOutId = pool.query(`SELECT stockOutId, productQty FROM inventory_stockOut_data WHERE stockOutId = '${stockOutId}'`, (err, row) => {
@@ -423,8 +422,8 @@ const removeStockOutTransaction = async (req, res) => {
                                         stockOutId = '${stockOutId}'
                                 )
                                 ORDER BY
-                                    stockInCreationDate ASC`;
-                console.log(">>><<<", sql_get_sowsoid);
+                                    stockInDate DESC,
+                                    stockInCreationDate DESC`;
                 pool.query(sql_get_sowsoid, (err, data) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
@@ -482,7 +481,7 @@ const removeStockOutTransaction = async (req, res) => {
 
                         data.forEach((item) => {
                             const { stockInId, remainingStock } = item;
-                            query += `    WHEN stockInId = '${stockInId}' THEN ROUND(${remainingStock},2)\n`;
+                            query += `    WHEN stockInId = '${stockInId}' THEN ROUND(${remainingStock},4)\n`;
                         });
 
                         query += '    ELSE remainingQty\nEND\n';
@@ -690,22 +689,11 @@ const updateStockOutTransaction = async (req, res) => {
                                     return key;
                                 }
                             })
-                            // if (updatedField.includes('productQty')) {
-                            //     previousData.productQty = previousData.productQty + ' ' + previousData.productUnit;
-                            //     newData.productQty = newData.productQty + ' ' + productUnit;
-                            //     console.log('chavda', newData);
-                            // }
-                            // else if (updatedField.includes('productUnit')) {
-                            //     previousData.productUnit = previousData.productQty + ' ' + previousData.productUnit;
-                            //     newData.productUnit = newData.productQty + ' ' + productUnit;
-                            //     console.log('chavda else', newData);
-                            // }
-                            // console.log('parmar out', newData);
                             if (updatedField == null || updatedField == '') {
                                 return res.status(500).send('No Change');
                             }
 
-                            sql_querry_getStockIndetail = `SELECT stockInId, productId, productQty, productPrice AS stockInPrice, remainingQty AS stockInQuantity FROM inventory_stockIn_data WHERE inventory_stockIn_data.productId = '${productId}' AND inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.remainingQty != 0 ORDER BY stockInDate ASC;
+                            sql_querry_getStockIndetail = `SELECT stockInId, productId, productQty, productPrice AS stockInPrice, remainingQty AS stockInQuantity FROM inventory_stockIn_data WHERE inventory_stockIn_data.productId = '${productId}' AND inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.remainingQty != 0 ORDER BY stockInDate DESC;
                                                            SELECT stockInId FROM inventory_stockOutwiseStockInId_data WHERE stockOutId = '${stockOutId}'`;
                             pool.query(sql_querry_getStockIndetail, (err, data) => {
                                 if (err) {
@@ -805,7 +793,7 @@ const updateStockOutTransaction = async (req, res) => {
                                         console.log('orignalStockInData', remainingStockByIds);
                                         console.log('stockInData', remainingStockByIds1);
 
-                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                         console.log(';;;;;;;;', stockInData)
                                         console.log('???????', orignalStockInData);
@@ -837,7 +825,7 @@ const updateStockOutTransaction = async (req, res) => {
                                         console.log('orignalStockInData', remainingStockByIds);
                                         console.log('stockInData', remainingStockByIds1);
 
-                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                         console.log(';;;;;;;;', stockInData)
                                         console.log('???????', orignalStockInData);
@@ -870,7 +858,7 @@ const updateStockOutTransaction = async (req, res) => {
 
                                         data.forEach((item) => {
                                             const { stockInId, stockInQuantity } = item;
-                                            query += `    WHEN stockInId = '${stockInId}' THEN ROUND(${stockInQuantity},2)\n`;
+                                            query += `    WHEN stockInId = '${stockInId}' THEN ROUND(${stockInQuantity},4)\n`;
                                         });
 
                                         query += '    ELSE remainingQty\nEND\n';
@@ -976,9 +964,7 @@ const updateStockOutTransaction = async (req, res) => {
                                                     WHERE
                                                         stockOutId = '${stockOutId}'
                                                 )
-                                                ORDER BY
-                                                    stockInCreationDate ASC`;
-                                    console.log(">>><<<", sql_get_sowsoid);
+                                                ORDER BY stockInDate DESC, stockInCreationDate DESC`;
                                     pool.query(sql_get_sowsoid, (err, data) => {
                                         if (err) {
                                             console.error("An error occurd in SQL Queery", err);
@@ -1046,7 +1032,7 @@ const updateStockOutTransaction = async (req, res) => {
                                         console.log('orignalStockInData', remainingStockByIds);
                                         console.log('stockInData', remainingStockByIds1);
 
-                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                         console.log(';;;;;;;;', junoJson)
                                         console.log('???????', updatedStockInData);
@@ -1075,7 +1061,7 @@ const updateStockOutTransaction = async (req, res) => {
 
                                             data.forEach((item) => {
                                                 const { stockInId, remainingStock } = item;
-                                                query += `    WHEN stockInId = '${stockInId}' THEN ROUND(${remainingStock},2)\n`;
+                                                query += `    WHEN stockInId = '${stockInId}' THEN ROUND(${remainingStock},4)\n`;
                                             });
 
                                             query += '    ELSE remainingQty\nEND\n';
@@ -1831,16 +1817,11 @@ const exportPdfForStockOut = (req, res) => {
                     const abc = Object.values(JSON.parse(JSON.stringify(rows)));
                     const sumPayAmount = abc.reduce((total, item) => total + (item['Out Price'] || 0), 0);
                     const sumFooterArray = ['Total', '', '', '', parseFloat(sumPayAmount).toLocaleString('en-IN')];
-                    if (req.query.startMonth && req.query.endMonth) {
-                        const startMonthName = formatMonthYear(startMonth);
-                        console.log(startMonthName);
-                        const endMonthName = formatMonthYear(endMonth);
-                        console.log(endMonthName);
-                        tableHeading = `Stock Out Data From ${startMonthName} To ${endMonthName}`;
+                    if (req.query.startDate && req.query.endDate) {
+                        tableHeading = `Stock Out Data From ${data.startDate} To ${data.endDate}`;
                     } else {
                         tableHeading = `All Stock Out Data`;
                     }
-
                     createPDF(res, abc, sumFooterArray, tableHeading)
                         .then(() => {
                             console.log('PDF created successfully');
@@ -1922,16 +1903,11 @@ const exportPdfForStockOutDataByCategoryId = (req, res) => {
                     const abc = Object.values(JSON.parse(JSON.stringify(rows)));
                     const sumPayAmount = abc.reduce((total, item) => total + (item['Out Price'] || 0), 0);
                     const sumFooterArray = ['Total', '', '', '', parseFloat(sumPayAmount).toLocaleString('en-IN')];
-                    if (req.query.startMonth && req.query.endMonth) {
-                        const startMonthName = formatMonthYear(startMonth);
-                        console.log(startMonthName);
-                        const endMonthName = formatMonthYear(endMonth);
-                        console.log(endMonthName);
-                        tableHeading = `Stock Out Data From ${startMonthName} To ${endMonthName}`;
+                    if (req.query.startDate && req.query.endDate) {
+                        tableHeading = `Stock Out Data From ${data.startDate} To ${data.endDate}`;
                     } else {
                         tableHeading = `All Stock Out Data`;
                     }
-
                     createPDF(res, abc, sumFooterArray, tableHeading)
                         .then(() => {
                             console.log('PDF created successfully');

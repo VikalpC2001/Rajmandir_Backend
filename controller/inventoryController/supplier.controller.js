@@ -1,7 +1,9 @@
 const pool = require('../../database');
 const excelJS = require("exceljs");
 const jwt = require("jsonwebtoken");
+const { jsPDF } = require('jspdf');
 const { processDatas } = require("../inventoryController/conversation.controller");
+const e = require('express');
 
 // Get Count List Supplier Wise
 
@@ -385,8 +387,8 @@ const getSupplierdata = (req, res) => {
                         if (req.query.searchWord) {
                             sql_querry_getSupplierData = `SELECT sd.supplierId, supplierFirstName AS supplierName, sd.supplierFirmName, sd.supplierNickName, sd.supplierPhoneNumber, GROUP_CONCAT(inventory_product_data.productName SEPARATOR ', ') as productList,
                                                           COALESCE(sisd.total_price, 0) - COALESCE(sosd.total_paid, 0) AS remainingAmount FROM inventory_supplier_data AS sd
-                                                          INNER JOIN inventory_supplierProducts_data ON inventory_supplierProducts_data.supplierId = sd.supplierId
-                                                          INNER JOIN inventory_product_data ON inventory_product_data.productId = inventory_supplierProducts_data.productId
+                                                          LEFT JOIN inventory_supplierProducts_data ON inventory_supplierProducts_data.supplierId = sd.supplierId
+                                                          LEFT JOIN inventory_product_data ON inventory_product_data.productId = inventory_supplierProducts_data.productId
                                                           LEFT JOIN
                                                                       (
                                                                           SELECT
@@ -415,8 +417,8 @@ const getSupplierdata = (req, res) => {
                         } else {
                             sql_querry_getSupplierData = `SELECT sd.supplierId, supplierFirstName AS supplierName, sd.supplierFirmName, sd.supplierNickName, sd.supplierPhoneNumber, GROUP_CONCAT(inventory_product_data.productName SEPARATOR ', ') as productList,
                                                           COALESCE(sisd.total_price, 0) - COALESCE(sosd.total_paid, 0) AS remainingAmount FROM inventory_supplier_data AS sd
-                                                          INNER JOIN inventory_supplierProducts_data ON inventory_supplierProducts_data.supplierId = sd.supplierId
-                                                          INNER JOIN inventory_product_data ON inventory_product_data.productId = inventory_supplierProducts_data.productId
+                                                          LEFT JOIN inventory_supplierProducts_data ON inventory_supplierProducts_data.supplierId = sd.supplierId
+                                                          LEFT JOIN inventory_product_data ON inventory_product_data.productId = inventory_supplierProducts_data.productId
                                                           LEFT JOIN
                                                                       (
                                                                           SELECT
@@ -442,7 +444,6 @@ const getSupplierdata = (req, res) => {
                                                           GROUP BY inventory_supplierProducts_data.supplierId 
                                                           ORDER BY sd.supplierFirmName LIMIT ${limit} `;
                         }
-                        console.log('>>>', sql_querry_getSupplierData);
                         pool.query(sql_querry_getSupplierData, (err, rows, fields) => {
                             if (err) {
                                 console.error("An error occurd in SQL Queery", err);
@@ -576,7 +577,7 @@ const removeSupplierDetails = async (req, res) => {
         token = req.headers ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            const factoryId = process.env.RAJ_MANDIR_FACTORY_ID
+            const factoryId = process.env.RAJ_MANDIR_FACTORY_ID;
             const userRights = decoded.id.rights;
             if (userRights == 1) {
                 const supplierId = req.query.supplierId
@@ -630,7 +631,7 @@ const fillSupplierDetails = (req, res) => {
                 return res.status(500).send('Database Error');
             }
             const supplierData = data[0][0]
-            var a = data[2][0].productList;
+            var a = data && data[2][0] && data[2][0].productList ? data[2][0].productList : '';
             b = a.split(",");
             console.log(b);
             const allData = {
@@ -651,30 +652,34 @@ const fillSupplierDetails = (req, res) => {
 const updateSupplierDetails = async (req, res) => {
     try {
         const supplierId = req.body.supplierId;
-        const data = {
-            supplierFirstName: req.body.supplierFirstName ? req.body.supplierFirstName.trim() : null,
-            supplierLastName: req.body.supplierLastName ? req.body.supplierLastName.trim() : null,
-            supplierFirmName: req.body.supplierFirmName.trim(),
-            supplierFirmAddress: req.body.supplierFirmAddress ? req.body.supplierFirmAddress.trim() : null,
-            supplierNickName: req.body.supplierNickName.trim(),
-            supplierPhoneNumber: req.body.supplierPhoneNumber.trim(),
-            supplierEmailId: req.body.supplierEmailId ? req.body.supplierEmailId.trim() : null,
-            productId: req.body.productId
-        }
-        if (!data.supplierNickName || !data.supplierFirmName || !data.supplierPhoneNumber || !data.productId) {
-            return res.status(400).send("Please Fill all the feilds");
-        }
-        const supllierProducts = () => {
-            var string = ''
-            data.productId.forEach((data, index) => {
-                if (index == 0)
-                    string = "(" + "'" + supplierId + "'" + "," + string + "'" + data + "'" + ")";
-                else
-                    string = string + ",(" + "'" + supplierId + "'" + "," + "'" + data + "'" + ")";
-            });
-            return string;
-        }
-        const sql_querry_updatedetails = `UPDATE inventory_supplier_data SET supplierFirstName = NULLIF('${data.supplierFirstName}','null'), 
+        const factoryId = process.env.RAJ_MANDIR_FACTORY_ID
+        if (supplierId == factoryId) {
+            return res.status(400).send('You Can not Edit Rajmandir Factory');
+        } else {
+            const data = {
+                supplierFirstName: req.body.supplierFirstName ? req.body.supplierFirstName.trim() : null,
+                supplierLastName: req.body.supplierLastName ? req.body.supplierLastName.trim() : null,
+                supplierFirmName: req.body.supplierFirmName.trim(),
+                supplierFirmAddress: req.body.supplierFirmAddress ? req.body.supplierFirmAddress.trim() : null,
+                supplierNickName: req.body.supplierNickName.trim(),
+                supplierPhoneNumber: req.body.supplierPhoneNumber.trim(),
+                supplierEmailId: req.body.supplierEmailId ? req.body.supplierEmailId.trim() : null,
+                productId: req.body.productId
+            }
+            if (!data.supplierNickName || !data.supplierFirmName || !data.supplierPhoneNumber || !data.productId) {
+                return res.status(400).send("Please Fill all the feilds");
+            }
+            const supllierProducts = () => {
+                var string = ''
+                data.productId.forEach((data, index) => {
+                    if (index == 0)
+                        string = "(" + "'" + supplierId + "'" + "," + string + "'" + data + "'" + ")";
+                    else
+                        string = string + ",(" + "'" + supplierId + "'" + "," + "'" + data + "'" + ")";
+                });
+                return string;
+            }
+            const sql_querry_updatedetails = `UPDATE inventory_supplier_data SET supplierFirstName = NULLIF('${data.supplierFirstName}','null'), 
                                                                              supplierLastName = NULLIF('${data.supplierLastName}','null'),
                                                                              supplierFirmName = NULLIF('${data.supplierFirmName}','null'),
                                                                              supplierFirmAddress = '${data.supplierFirmAddress}',
@@ -682,27 +687,28 @@ const updateSupplierDetails = async (req, res) => {
                                                                              supplierPhoneNumber = '${data.supplierPhoneNumber}',
                                                                              supplierEmailId = NULLIF('${data.supplierEmailId}','null')
                                                                        WHERE supplierId = '${supplierId}'`;
-        pool.query(sql_querry_updatedetails, (err, data) => {
-            if (err) {
-                console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            }
-            sql_querry_deleteSupplierProducts = `DELETE FROM inventory_supplierProducts_data WHERE supplierId = '${supplierId}'`;
-            pool.query(sql_querry_deleteSupplierProducts, (err, data) => {
+            pool.query(sql_querry_updatedetails, (err, data) => {
                 if (err) {
                     console.error("An error occurd in SQL Queery", err);
                     return res.status(500).send('Database Error');
                 }
-                sql_queries_addsupllierProducts = `INSERT INTO inventory_supplierProducts_data (supplierId, productId) VALUES ${supllierProducts()}`;
-                pool.query(sql_queries_addsupllierProducts, (err, data) => {
+                sql_querry_deleteSupplierProducts = `DELETE FROM inventory_supplierProducts_data WHERE supplierId = '${supplierId}'`;
+                pool.query(sql_querry_deleteSupplierProducts, (err, data) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    return res.status(200).send("Supplier Updated Successfully");
+                    sql_queries_addsupllierProducts = `INSERT INTO inventory_supplierProducts_data (supplierId, productId) VALUES ${supllierProducts()}`;
+                    pool.query(sql_queries_addsupllierProducts, (err, data) => {
+                        if (err) {
+                            console.error("An error occurd in SQL Queery", err);
+                            return res.status(500).send('Database Error');
+                        }
+                        return res.status(200).send("Supplier Updated Successfully");
+                    })
                 })
             })
-        })
+        }
     } catch (error) {
         console.error('An error occurd', error);
         res.status(500).send('Internal Server Error');
@@ -908,6 +914,236 @@ const exportExcelSheetForAllProductBySupplierId = (req, res) => {
     }
 };
 
+// Export PDF Function
+
+async function createPDF(res, datas, sumFooterArray, tableHeading) {
+    try {
+        // Create a new PDF document
+        console.log(';;;;;;', datas);
+        console.log('?????', sumFooterArray);
+        console.log('?????', tableHeading);
+        const doc = new jsPDF();
+
+        // JSON data
+        const jsonData = datas;
+        // console.log(jsonData);
+
+        // Get the keys from the first JSON object to set as columns
+        const keys = Object.keys(jsonData[0]);
+
+        // Define columns for the auto table, including a "Serial No." column
+        const columns = [
+            { header: 'Sr.', dataKey: 'serialNo' }, // Add Serial No. column
+            ...keys.map(key => ({ header: key, dataKey: key }))
+        ]
+
+        // Convert JSON data to an array of arrays (table rows) and add a serial number
+        const data = jsonData.map((item, index) => [index + 1, ...keys.map(key => item[key]), '', '']);
+
+        // Initialize the sum columns with empty strings
+        if (sumFooterArray) {
+            data.push(sumFooterArray);
+        }
+
+        // Add auto table to the PDF document
+        doc.text(15, 15, tableHeading);
+        doc.autoTable({
+            startY: 20,
+            head: [columns.map(col => col.header)], // Extract headers correctly
+            body: data,
+            theme: 'grid',
+            styles: {
+                cellPadding: 2, // Add padding to cells for better appearance
+                halign: 'center', // Horizontally center-align content
+                fontSize: 10
+            },
+        });
+
+        const pdfBytes = await doc.output();
+        const fileName = 'jane-doe.pdf'; // Set the desired file name
+
+        // Set the response headers for the PDF download
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Type', 'application/pdf');
+
+        // Stream the PDF to the client for download
+        res.send(pdfBytes);
+
+
+        // Save the PDF to a file
+        // const pdfFilename = 'output.pdf';
+        // fs.writeFileSync(pdfFilename, doc.output());
+        // console.log(`PDF saved as ${pdfFilename}`);
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Export PDF Cash Transaction List
+
+const exportPdfForAllProductBySupplierId = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+            if (branchId) {
+                var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+                var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+                var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+                const data = {
+                    startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                    endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                    supplierId: req.query.supplierId,
+                }
+                const commaonQuery = `SELECT
+                                pd.productName AS product,
+                                COALESCE(si.total_quantity, 0) AS remainingStock,
+                                COALESCE(si.total_expense, 0) AS totalExpense,
+                                COALESCE(siLu.productQty, 0) AS lastStockIN,
+                                COALESCE(siLu.productPrice, 0) AS lastUpdatedPrice,
+                                COALESCE(DATE_FORMAT(siLu.stockInDate,'%d-%m-%Y'), 'No Update') AS lastStockdInAt,
+                                pd.unit AS minProductUnit
+                            FROM
+                                inventory_supplierProducts_data AS sp
+                            INNER JOIN(
+                                SELECT
+                                    inventory_product_data.productId,
+                                inventory_product_data.productName,
+                                inventory_product_data.minProductUnit AS unit
+                                FROM
+                                    inventory_product_data
+                            ) AS pd
+                            ON
+                            sp.productId = pd.productId
+                            LEFT JOIN(
+                                SELECT
+                                    productId,
+                                    stockInDate,
+                                    productQty,
+                                    productPrice
+                                FROM
+                                    inventory_stockIn_data
+                                WHERE
+                                    (productId, stockInCreationDate) IN(
+                                        SELECT
+                                        productId,
+                                        MAX(stockInCreationDate)
+                                    FROM
+                                        inventory_stockIn_data
+                                    WHERE
+                                        inventory_stockIn_data.supplierId = '${data.supplierId}'
+                                    GROUP BY
+                                        productId
+                                    )
+                            ) AS siLu
+                            ON
+                            sp.productId = siLu.productId`;
+                if (req.query.startDate && req.query.endDate) {
+                    sql_querry_getAllProductBysupplier = `${commaonQuery}
+                                                        LEFT JOIN(
+                                                            SELECT
+                                                                inventory_stockIn_data.productId,
+                                                            ROUND(SUM(
+                                                                inventory_stockIn_data.productQty
+                                                            ),2) AS total_quantity,
+                                                            ROUND(SUM(
+                                                                inventory_stockIn_data.totalPrice
+                                                            )) AS total_expense
+                                                            FROM
+                                                                inventory_stockIn_data
+                                                            WHERE
+                                                                inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.supplierId = '${data.supplierId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                            GROUP BY
+                                                                inventory_stockIn_data.productId
+                                                        ) AS si
+                                                        ON
+                                                        sp.productId = si.productId
+                                                        WHERE sp.supplierId = '${data.supplierId}'
+                                                        ORDER BY pd.productName`;
+                } else {
+                    sql_querry_getAllProductBysupplier = `${commaonQuery}
+                                                        LEFT JOIN(
+                                                              SELECT
+                                                                  inventory_stockIn_data.productId,
+                                                              ROUND(SUM(
+                                                                  inventory_stockIn_data.productQty
+                                                              ),2) AS total_quantity,
+                                                              ROUND(SUM(
+                                                                  inventory_stockIn_data.totalPrice
+                                                              )) AS total_expense
+                                                              FROM
+                                                                  inventory_stockIn_data
+                                                              WHERE
+                                                                  inventory_stockIn_data.branchId = '${branchId}' AND inventory_stockIn_data.supplierId = '${data.supplierId}' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                              GROUP BY
+                                                                  inventory_stockIn_data.productId
+                                                          ) AS si
+                                                        ON
+                                                          sp.productId = si.productId
+                                                          WHERE sp.supplierId = '${data.supplierId}'
+                                                          ORDER BY pd.productName`;
+                }
+                pool.query(sql_querry_getAllProductBysupplier, async (err, rows) => {
+                    if (err) {
+                        console.error("An error occurd in SQL Queery", err);
+                        return res.status(500).send('Database Error');
+                    } else if (rows && rows.length <= 0) {
+                        return res.status(400).send('No Data Found');
+                    } else {
+                        const datas = Object.values(JSON.parse(JSON.stringify(rows)));
+                        await processDatas(datas)
+                            .then(async (data) => {
+                                const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
+                                ) : []
+                                const abc = rows.map(e => {
+                                    return {
+                                        "Product Name": e.product,
+                                        "Remain Stock": e.remainingStock,
+                                        "Expense": e.totalExpense,
+                                        "Last In": e.lastStockIN,
+                                        "Last Price": e.lastUpdatedPrice,
+                                        "Last In Date": e.lastStockdInAt,
+                                    };
+                                });
+                                const sumPayAmount = abc.reduce((total, item) => total + (item['Expense'] || 0), 0);;
+                                const sumFooterArray = ['Total', '', '', parseFloat(sumPayAmount).toLocaleString('en-IN')];
+                                if (req.query.startDate && req.query.endDate) {
+                                    tableHeading = `Cash Transaction From ${data.startDate} To ${data.endDate}`;
+                                } else {
+                                    tableHeading = `Cash Transaction From ${firstDay} To ${lastDay}`;
+                                }
+
+                                createPDF(res, abc, sumFooterArray, tableHeading)
+                                    .then(() => {
+                                        console.log('PDF created successfully');
+                                        res.status(200);
+                                    })
+                                    .catch((err) => {
+                                        console.log(err);
+                                        res.status(500).send('Error creating PDF');
+                                    });
+                            }).catch(error => {
+                                console.error('Error in processing datas:', error);
+                                return res.status(500).send('Internal Error');
+                            });
+                    }
+                });
+            } else {
+                return res.status(401).send('BranchId Not Found');
+            }
+        } else {
+            return res.status(401).send('Pleasr Login Firest.....!');
+        }
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
 // GET Supplier All Branch Data
 
 const getSupplierAllBranchData = (req, res) => {
@@ -987,7 +1223,6 @@ const getSupplierAllBranchData = (req, res) => {
                                                     GROUP BY inventory_supplierProducts_data.supplierId 
                                                     ORDER BY sd.supplierFirmName LIMIT ${limit} `;
                 }
-                console.log('>>>', sql_querry_getSupplierData);
                 pool.query(sql_querry_getSupplierData, (err, rows, fields) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
@@ -1025,6 +1260,7 @@ module.exports = {
     getSupplierCounterDetailsById,
     getProductDetailsBySupplierId,
     getAllProductDetailsBySupplierId,
-    exportExcelSheetForAllProductBySupplierId
+    exportExcelSheetForAllProductBySupplierId,
+    exportPdfForAllProductBySupplierId
 }
 

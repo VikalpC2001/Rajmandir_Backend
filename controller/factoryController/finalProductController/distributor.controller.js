@@ -627,6 +627,401 @@ const getAllProductDetailsByDistributorId = async (req, res) => {
     }
 }
 
+const exportExcelSheetForAllProductDetailsByDistributorId = (req, res) => {
+    let token;
+    token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+    if (token) {
+        var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+        var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+        var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+        const data = {
+            startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+            endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+            distributorId: req.query.distributorId
+        }
+        const commaonQuery = `SELECT
+                                  dpd.mfProductId AS mfProductId,
+                                  fmp.mfProductName AS mfProductName,
+                                  fmp.minMfProductUnit AS minMfProductUnit,
+                                  COALESCE(so.qty, 0) AS remainingStock,
+                                  COALESCE(so.cost, 0) AS cost,
+                                  COALESCE(sod.totalSell, 0) AS totalSellPrice
+                              FROM
+                                  factory_distributorProducts_data AS dpd
+                              INNER JOIN factory_manufactureProduct_data AS fmp ON fmp.mfProductId = dpd.mfProductId`;
+        if (req.query.startDate && req.query.endDate) {
+            sql_querry_getAllProductBysupplier = `${commaonQuery}
+                                                              LEFT JOIN(
+                                                                  SELECT
+                                                                      mfso.mfProductId,
+                                                                      SUM(mfso.mfProductQty) AS qty,
+                                                                      SUM(mfso.mfProductOutPrice) AS cost
+                                                                  FROM
+                                                                      factory_mfProductStockOut_data AS mfso
+                                                                  WHERE
+                                                                      mfso.mfStockOutId IN(
+                                                                      SELECT
+                                                                          COALESCE(dwo.mfStockOutId)
+                                                                      FROM
+                                                                          factory_distributorWiseOut_data AS dwo
+                                                                      WHERE
+                                                                          dwo.distributorId = '${data.distributorId}' AND dwo.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                                      GROUP BY
+                                                                          mfso.mfProductId
+                                                                  )
+                                                              ) AS so
+                                                              ON
+                                                                  fmp.mfProductId = so.mfProductId
+                                                              LEFT JOIN(
+                                                                  SELECT
+                                                                      dwod.mfProductId,
+                                                                      SUM(dwod.sellAmount) AS totalSell
+                                                                  FROM
+                                                                      factory_distributorWiseOut_data AS dwod
+                                                                  WHERE dwod.distributorId = '${data.distributorId}' AND dwod.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                                  GROUP BY dwod.mfProductId
+                                                              ) AS sod ON dpd.mfProductId = sod.mfProductId
+                                                              WHERE distributorId = '${data.distributorId}'
+                                                              ORDER BY fmp.mfProductName`;
+        } else {
+            sql_querry_getAllProductBysupplier = `${commaonQuery}
+                                                              LEFT JOIN(
+                                                                  SELECT
+                                                                      mfso.mfProductId,
+                                                                      SUM(mfso.mfProductQty) AS qty,
+                                                                      SUM(mfso.mfProductOutPrice) AS cost
+                                                                  FROM
+                                                                      factory_mfProductStockOut_data AS mfso
+                                                                  WHERE
+                                                                      mfso.mfStockOutId IN(
+                                                                      SELECT
+                                                                          COALESCE(dwo.mfStockOutId)
+                                                                      FROM
+                                                                          factory_distributorWiseOut_data AS dwo
+                                                                      WHERE
+                                                                          dwo.distributorId = '${data.distributorId}' AND dwo.sellDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                                      GROUP BY
+                                                                          mfso.mfProductId
+                                                                  )
+                                                              ) AS so
+                                                              ON
+                                                                  dpd.mfProductId = so.mfProductId
+                                                              LEFT JOIN(
+                                                                  SELECT
+                                                                      dwod.mfProductId,
+                                                                      SUM(dwod.sellAmount) AS totalSell
+                                                                  FROM
+                                                                      factory_distributorWiseOut_data AS dwod
+                                                                  WHERE dwod.distributorId = '${data.distributorId}' AND dwod.sellDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                                  GROUP BY dwod.mfProductId
+                                                              ) AS sod ON dpd.mfProductId = sod.mfProductId
+                                                              WHERE distributorId = '${data.distributorId}'
+                                                              ORDER BY fmp.mfProductName`;
+        }
+        pool.query(sql_querry_getAllProductBysupplier, async (err, rows) => {
+            if (err) return res.status(404).send(err);
+            const datas = Object.values(JSON.parse(JSON.stringify(rows)));
+            await processDatas(datas)
+                .then(async (data) => {
+                    const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minRawMaterialUnit },
+                    ) : []
+                    const workbook = new excelJS.Workbook();  // Create a new workbook
+                    const worksheet = workbook.addWorksheet("All Product"); // New Worksheet
+
+                    if (req.query.startDate && req.query.endDate) {
+                        worksheet.mergeCells('A1', 'E1');
+                        worksheet.getCell('A1').value = `Supplier Wise Product List : ${(req.query.startDate).slice(4, 15)} To ${(req.query.endDate).slice(4, 15)}`;
+                    } else {
+                        worksheet.mergeCells('A1', 'E1');
+                        worksheet.getCell('A1').value = `Supplier Wise Product List : ${firstDay} To ${lastDay}`;
+                    }
+
+                    /*Column headers*/
+                    worksheet.getRow(2).values = ['S no.', 'Product Name', 'Totoal Distribute', 'Total Cost', 'Sell Price'];
+
+                    // Column for data in excel. key must match data key
+                    worksheet.columns = [
+                        { key: "s_no", width: 10, },
+                        { key: "Product Name", width: 30 },
+                        { key: "remainingStock", width: 40 },
+                        { key: "cost", width: 20 },
+                        { key: "totalSellPrice", width: 20 }
+                    ];
+                    //Looping through User data
+                    const arr = rows
+                    let counter = 1;
+                    arr.forEach((user, index) => {
+                        user.s_no = counter;
+                        const row = worksheet.addRow(user); // Add data in worksheet
+                        counter++;
+                    });
+                    // Making first line in excel bold
+                    worksheet.getRow(1).eachCell((cell) => {
+                        cell.font = { bold: true, size: 13 }
+                        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                        height = 200
+                    });
+                    worksheet.getRow(2).eachCell((cell) => {
+                        cell.font = { bold: true, size: 13 }
+                        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                    });
+                    worksheet.getRow(1).height = 30;
+                    worksheet.getRow(2).height = 20;
+                    worksheet.getRow(arr.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arr.length + 2})` }, { formula: `SUM(E3:E${arr.length + 2})` }];
+
+                    worksheet.getRow(arr.length + 3).eachCell((cell) => {
+                        cell.font = { bold: true, size: 14 }
+                        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                    })
+                    worksheet.eachRow((row) => {
+                        row.eachCell((cell) => {
+                            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                            row.height = 20
+                        });
+                    });
+                    try {
+                        const data = await workbook.xlsx.writeBuffer()
+                        var fileName = new Date().toString().slice(4, 15) + ".xlsx";
+                        // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                        // res.addHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename="+ fileName)
+                        res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        res.type = 'blob';
+                        res.send(data)
+                        // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                        // res.setHeader("Content-Disposition", "attachment; filename=" + "Report.xlsx");
+                        // workbook.xlsx.write(res)
+                        // .then((data)=>{
+                        //     res.end();
+                        //         console.log('File write done........');
+                        //     });
+                    } catch (err) {
+                        throw new Error(err);
+                    }
+                }).catch(error => {
+                    console.error('Error in processing datas:', error);
+                    return res.status(500).send('Internal Error');
+                });
+        })
+    } else {
+        return res.status(401).send('Pleasr Login Firest.....!');
+    }
+};
+
+// Export PDF Function
+
+async function createPDF(res, datas, sumFooterArray, tableHeading) {
+    try {
+        // Create a new PDF document
+        console.log(';;;;;;', datas);
+        console.log('?????', sumFooterArray);
+        console.log('?????', tableHeading);
+        const doc = new jsPDF();
+
+        // JSON data
+        const jsonData = datas;
+        // console.log(jsonData);
+
+        // Get the keys from the first JSON object to set as columns
+        const keys = Object.keys(jsonData[0]);
+
+        // Define columns for the auto table, including a "Serial No." column
+        const columns = [
+            { header: 'Sr.', dataKey: 'serialNo' }, // Add Serial No. column
+            ...keys.map(key => ({ header: key, dataKey: key }))
+        ]
+
+        // Convert JSON data to an array of arrays (table rows) and add a serial number
+        const data = jsonData.map((item, index) => [index + 1, ...keys.map(key => item[key]), '', '']);
+
+        // Initialize the sum columns with empty strings
+        if (sumFooterArray) {
+            data.push(sumFooterArray);
+        }
+
+        // Add auto table to the PDF document
+        doc.text(15, 15, tableHeading);
+        doc.autoTable({
+            startY: 20,
+            head: [columns.map(col => col.header)], // Extract headers correctly
+            body: data,
+            theme: 'grid',
+            styles: {
+                cellPadding: 2, // Add padding to cells for better appearance
+                halign: 'center', // Horizontally center-align content
+                fontSize: 10
+            },
+        });
+
+        const pdfBytes = await doc.output();
+        const fileName = 'jane-doe.pdf'; // Set the desired file name
+
+        // Set the response headers for the PDF download
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Type', 'application/pdf');
+
+        // Stream the PDF to the client for download
+        res.send(pdfBytes);
+
+
+        // Save the PDF to a file
+        // const pdfFilename = 'output.pdf';
+        // fs.writeFileSync(pdfFilename, doc.output());
+        // console.log(`PDF saved as ${pdfFilename}`);
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Export PDF Cash Transaction List
+
+const exportPdfForAllProductDetailsByDistributorId = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+            var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+            var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+            const data = {
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                distributorId: req.query.distributorId
+            }
+            const commaonQuery = `SELECT
+                                  dpd.mfProductId AS mfProductId,
+                                  fmp.mfProductName AS mfProductName,
+                                  fmp.minMfProductUnit AS minMfProductUnit,
+                                  COALESCE(so.qty, 0) AS remainingStock,
+                                  COALESCE(so.cost, 0) AS cost,
+                                  COALESCE(sod.totalSell, 0) AS totalSellPrice
+                              FROM
+                                  factory_distributorProducts_data AS dpd
+                              INNER JOIN factory_manufactureProduct_data AS fmp ON fmp.mfProductId = dpd.mfProductId`;
+            if (req.query.startDate && req.query.endDate) {
+                sql_querry_getAllProductBysupplier = `${commaonQuery}
+                                                              LEFT JOIN(
+                                                                  SELECT
+                                                                      mfso.mfProductId,
+                                                                      SUM(mfso.mfProductQty) AS qty,
+                                                                      SUM(mfso.mfProductOutPrice) AS cost
+                                                                  FROM
+                                                                      factory_mfProductStockOut_data AS mfso
+                                                                  WHERE
+                                                                      mfso.mfStockOutId IN(
+                                                                      SELECT
+                                                                          COALESCE(dwo.mfStockOutId)
+                                                                      FROM
+                                                                          factory_distributorWiseOut_data AS dwo
+                                                                      WHERE
+                                                                          dwo.distributorId = '${data.distributorId}' AND dwo.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                                      GROUP BY
+                                                                          mfso.mfProductId
+                                                                  )
+                                                              ) AS so
+                                                              ON
+                                                                  fmp.mfProductId = so.mfProductId
+                                                              LEFT JOIN(
+                                                                  SELECT
+                                                                      dwod.mfProductId,
+                                                                      SUM(dwod.sellAmount) AS totalSell
+                                                                  FROM
+                                                                      factory_distributorWiseOut_data AS dwod
+                                                                  WHERE dwod.distributorId = '${data.distributorId}' AND dwod.sellDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                                                  GROUP BY dwod.mfProductId
+                                                              ) AS sod ON dpd.mfProductId = sod.mfProductId
+                                                              WHERE distributorId = '${data.distributorId}'
+                                                              ORDER BY fmp.mfProductName`;
+            } else {
+                sql_querry_getAllProductBysupplier = `${commaonQuery}
+                                                              LEFT JOIN(
+                                                                  SELECT
+                                                                      mfso.mfProductId,
+                                                                      SUM(mfso.mfProductQty) AS qty,
+                                                                      SUM(mfso.mfProductOutPrice) AS cost
+                                                                  FROM
+                                                                      factory_mfProductStockOut_data AS mfso
+                                                                  WHERE
+                                                                      mfso.mfStockOutId IN(
+                                                                      SELECT
+                                                                          COALESCE(dwo.mfStockOutId)
+                                                                      FROM
+                                                                          factory_distributorWiseOut_data AS dwo
+                                                                      WHERE
+                                                                          dwo.distributorId = '${data.distributorId}' AND dwo.sellDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                                      GROUP BY
+                                                                          mfso.mfProductId
+                                                                  )
+                                                              ) AS so
+                                                              ON
+                                                                  dpd.mfProductId = so.mfProductId
+                                                              LEFT JOIN(
+                                                                  SELECT
+                                                                      dwod.mfProductId,
+                                                                      SUM(dwod.sellAmount) AS totalSell
+                                                                  FROM
+                                                                      factory_distributorWiseOut_data AS dwod
+                                                                  WHERE dwod.distributorId = '${data.distributorId}' AND dwod.sellDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                                  GROUP BY dwod.mfProductId
+                                                              ) AS sod ON dpd.mfProductId = sod.mfProductId
+                                                              WHERE distributorId = '${data.distributorId}'
+                                                              ORDER BY fmp.mfProductName`;
+            }
+            pool.query(sql_querry_getAllProductBysupplier, async (err, rows) => {
+                if (err) {
+                    console.error("An error occurd in SQL Queery", err);
+                    return res.status(500).send('Database Error');
+                } else if (rows && rows.length <= 0) {
+                    return res.status(400).send('No Data Found');
+                } else {
+                    const datas = Object.values(JSON.parse(JSON.stringify(rows)));
+                    await processDatas(datas)
+                        .then(async (data) => {
+                            const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
+                            ) : []
+                            const abc = rows.map(e => {
+                                return {
+                                    "Produc": e.mfProductName,
+                                    "Totoal Distribute": e.remainingStock,
+                                    "Cost": e.cost,
+                                    "Sell Price": e.totalSellPrice
+                                };
+                            });
+                            const cost = abc.reduce((total, item) => total + (item['cost'] || 0), 0);
+                            const sellPrice = abc.reduce((total, item) => total + (item['Sell Price'] || 0), 0);;
+                            const sumFooterArray = ['Total', '', parseFloat(cost).toLocaleString('en-IN'), parseFloat(sellPrice).toLocaleString('en-IN')];
+                            if (req.query.startDate && req.query.endDate) {
+                                tableHeading = `Cash Transaction From ${(req.query.startDate).slice(4, 15)} To ${(req.query.endDate).slice(4, 15)}`;
+                            } else {
+                                tableHeading = `Cash Transaction From ${firstDay} To ${lastDay}`;
+                            }
+
+                            createPDF(res, abc, sumFooterArray, tableHeading)
+                                .then(() => {
+                                    console.log('PDF created successfully');
+                                    res.status(200);
+                                })
+                                .catch((err) => {
+                                    console.log(err);
+                                    res.status(500).send('Error creating PDF');
+                                });
+                        }).catch(error => {
+                            console.error('Error in processing datas:', error);
+                            return res.status(500).send('Internal Error');
+                        });
+                }
+            });
+        } else {
+            return res.status(401).send('Pleasr Login Firest.....!');
+        }
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
 module.exports = {
     addDistributorDetails,
     removeDistributorDetails,
@@ -635,5 +1030,7 @@ module.exports = {
     getFactoryDistributordata,
     getDistributorCounterDetailsById,
     getFactoryDistributorDetailsById,
-    getAllProductDetailsByDistributorId
+    getAllProductDetailsByDistributorId,
+    exportExcelSheetForAllProductDetailsByDistributorId,
+    exportPdfForAllProductDetailsByDistributorId
 }

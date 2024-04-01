@@ -1760,7 +1760,6 @@ const getCategoryWiseUsedByProduct = (req, res) => {
                                                 LEFT JOIN inventory_product_data AS ipd ON ipd.productId = '${data.productId}'
                                                 ORDER BY so.usedQty DESC`
                 }
-                console.log(sql_queries_getCategoryUsed);
                 pool.query(sql_queries_getCategoryUsed, (err, result) => {
                     if (err) {
                         console.error("An error occurd in SQL Queery", err);
@@ -3183,7 +3182,7 @@ const exportPdfForAllProductsData = (req, res) => {
                                         const abc = extractedData;
 
                                         if (req.query.startDate && req.query.endDate) {
-                                            tableHeading = `Product Data From ${data.startDate} To ${data.endDate}`;
+                                            tableHeading = `Product Data From ${(req.query.startDate).slice(4, 15)} To ${(req.query.endDate).slice(4, 15)}`;
                                         } else {
                                             tableHeading = `Product Data From ${firstDay} To ${lastDay}`;
                                         }

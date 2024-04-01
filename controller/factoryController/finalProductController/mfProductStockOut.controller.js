@@ -104,12 +104,23 @@ const getMfStockOutList = async (req, res) => {
                     } else {
                         const numRows = rows[0].numRows;
                         const numPages = Math.ceil(numRows / numPerPage);
-                        const commonQuery = `SELECT mfStockOutId, user_details.userName AS outBy, CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS userName,factory_manufactureProduct_data.mfProductName AS mfProductName, mfStockOutDisplayQty AS fillQty, mfStockOutDisplayUnit AS fillUnit, CONCAT(mfStockOutDisplayQty,' ',mfStockOutDisplayUnit) AS Quantity, ROUND(mfProductOutPrice) AS mfProductOutPrice, factory_mfProductOutCategory_data.stockOutCategoryName AS stockOutCategoryName, mfStockOutComment, CONCAT(DATE_FORMAT(mfStockOutDate,'%d-%m-%Y'),' ',DATE_FORMAT(mfStockOutCreationDate, '%h:%i:%s %p')) AS mfStockOutDate 
-                                                FROM factory_mfProductStockOut_data
-                                                INNER JOIN user_details ON user_details.userId = factory_mfProductStockOut_data.userId
-                                                INNER JOIN factory_manufactureProduct_data ON factory_manufactureProduct_data.mfProductId = factory_mfProductStockOut_data.mfProductId
-                                                INNER JOIN factory_mfProductOutCategory_data ON factory_mfProductOutCategory_data.stockOutCategoryId = factory_mfProductStockOut_data.mfProductOutCategory
-                                                WHERE factory_mfProductStockOut_data.mfProductId IN (SELECT COALESCE(fmp.mfProductId, null) FROM factory_manufactureProduct_data AS fmp WHERE fmp.mfProductCategoryId = '${departmentId}')`;
+                        const commonQuery = `SELECT 
+                                                mfStockOutId, 
+                                                user_details.userName AS outBy, 
+                                                CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS userName,
+                                                factory_manufactureProduct_data.mfProductName AS mfProductName, 
+                                                mfStockOutDisplayQty AS fillQty, 
+                                                mfStockOutDisplayUnit AS fillUnit, 
+                                                CONCAT(mfStockOutDisplayQty,' ',mfStockOutDisplayUnit) AS Quantity, 
+                                                ROUND(mfProductOutPrice) AS mfProductOutPrice, 
+                                                factory_mfProductOutCategory_data.stockOutCategoryName AS stockOutCategoryName, 
+                                                mfStockOutComment, 
+                                                CONCAT(DATE_FORMAT(mfStockOutDate,'%d-%m-%Y'),' ',DATE_FORMAT(mfStockOutCreationDate, '%h:%i:%s %p')) AS mfStockOutDate 
+                                            FROM factory_mfProductStockOut_data
+                                            INNER JOIN user_details ON user_details.userId = factory_mfProductStockOut_data.userId
+                                            INNER JOIN factory_manufactureProduct_data ON factory_manufactureProduct_data.mfProductId = factory_mfProductStockOut_data.mfProductId
+                                            INNER JOIN factory_mfProductOutCategory_data ON factory_mfProductOutCategory_data.stockOutCategoryId = factory_mfProductStockOut_data.mfProductOutCategory
+                                            WHERE factory_mfProductStockOut_data.mfProductId IN (SELECT COALESCE(fmp.mfProductId, null) FROM factory_manufactureProduct_data AS fmp WHERE fmp.mfProductCategoryId = '${departmentId}')`;
                         if (req.query.mfProductId && req.query.startDate && req.query.endDate) {
                             sql_queries_getdetails = `${commonQuery}
                                                 AND factory_mfProductStockOut_data.mfProductId = '${data.mfProductId}' AND factory_mfProductStockOut_data.mfStockOutDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
@@ -285,7 +296,6 @@ const addMfProductStockOutData = (req, res) => {
                                             }
                                         }
                                     }
-
                                     if (remainingQuantity <= 0) {
                                         break;
                                     }
@@ -307,10 +317,10 @@ const addMfProductStockOutData = (req, res) => {
 
                                     data.forEach((item) => {
                                         const { mfStockInID, stockInQuantity } = item;
-                                        query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${stockInQuantity},2)\n`;
+                                        query += `WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${stockInQuantity},4)\n`;
                                     });
 
-                                    query += '    ELSE remainingQty\nEND\n';
+                                    query += 'ELSE remainingQty\nEND\n';
 
                                     const stockInIds = data.map((item) => `'${item.mfStockInID}'`).join(', ');
                                     query += `WHERE mfStockInID IN (${stockInIds});`;
@@ -351,7 +361,7 @@ const addMfProductStockOutData = (req, res) => {
                                         console.log('orignalStockInData', remainingStockByIds);
                                         console.log('stockInData', remainingStockByIds1);
 
-                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                         console.log(';;;;;;;;', stockInData)
                                         console.log('???????', orignalStockInData);
@@ -359,7 +369,7 @@ const addMfProductStockOutData = (req, res) => {
                                         console.log("RRRRR", remainStockCutQty);
 
                                         // Use map to combine the arrays and format them
-                                        const combinedData = sowsiId.map((id, index) => `('${mfStockOutId}','${id}',ROUND(${remainStockCutQty[index]},2))`);
+                                        const combinedData = sowsiId.map((id, index) => `('${mfStockOutId}','${id}',${remainStockCutQty[index]})`);
 
                                         // Join the array elements into a single string
                                         const stockOutWiseStockInId = combinedData.join(',');
@@ -470,7 +480,7 @@ const removeMfProductStockOutTransaction = async (req, res) => {
                 console.error("An error occurd in SQL Queery", err);
                 return res.status(500).send('Database Error');
             }
-            const isStockInId = chk && chk[0].length ? chk[0].stockInId : null;
+            const isStockInId = chk && chk[0] ? chk[0].stockInId : null;
             if (isStockInId) {
                 if (chk[0].productQty != chk[0].remainingQty) {
                     return res.status(400).send('You Can not Delete Transaction Because Its Used');
@@ -574,7 +584,7 @@ const removeMfProductStockOutTransaction = async (req, res) => {
 
                                     data.forEach((item) => {
                                         const { mfStockInID, remainingStock } = item;
-                                        query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${remainingStock},2)\n`;
+                                        query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${remainingStock},4)\n`;
                                     });
 
                                     query += '    ELSE remainingQty\nEND\n';
@@ -709,7 +719,7 @@ const removeMfProductStockOutTransaction = async (req, res) => {
 
                                 data.forEach((item) => {
                                     const { mfStockInID, remainingStock } = item;
-                                    query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${remainingStock},2)\n`;
+                                    query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${remainingStock},4)\n`;
                                 });
 
                                 query += '    ELSE remainingQty\nEND\n';
@@ -792,7 +802,7 @@ const updateMfStockOutTransaction = async (req, res) => {
 
                 if (isStockInId) {
                     if (chk[0].productQty != chk[0].remainingQty) {
-                        return res.status(400).send('You Can not Delete Transaction Because Its Used');
+                        return res.status(400).send('You Can not Edit Transaction Because It is Used....!');
                     } else {
                         const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM product_unit_preference WHERE productId = '${mfProductId}' ORDER BY product_unit_preference.priorityNumber ASC;
                                                          SELECT ipd.minProductUnit AS  minProductUnit, ipd.isExpired AS isExpired, ipd.expiredDays AS expiredDays FROM inventory_product_data AS ipd WHERE ipd.productId = '${mfProductId}'`;
@@ -968,7 +978,7 @@ const updateMfStockOutTransaction = async (req, res) => {
                                                         console.log('orignalStockInData', remainingStockByIds);
                                                         console.log('stockInData', remainingStockByIds1);
 
-                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                                         console.log(';;;;;;;;', stockInData)
                                                         console.log('???????', orignalStockInData);
@@ -1000,7 +1010,7 @@ const updateMfStockOutTransaction = async (req, res) => {
                                                         console.log('orignalStockInData', remainingStockByIds);
                                                         console.log('stockInData', remainingStockByIds1);
 
-                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                                         console.log(';;;;;;;;', stockInData)
                                                         console.log('???????', orignalStockInData);
@@ -1010,7 +1020,7 @@ const updateMfStockOutTransaction = async (req, res) => {
                                                         console.log("RRRRR", remainStockCutQty);
 
                                                         // Use map to combine the arrays and format them
-                                                        const combinedData = removeSameId.map((id, index) => `('${mfStockOutId}','${id}',ROUND(${remainStockCutQty[index]},2))`);
+                                                        const combinedData = removeSameId.map((id, index) => `('${mfStockOutId}','${id}',${remainStockCutQty[index]})`);
 
                                                         // Join the array elements into a single string
                                                         const stockOutWiseStockInId = combinedData.join(',');
@@ -1033,7 +1043,7 @@ const updateMfStockOutTransaction = async (req, res) => {
 
                                                         data.forEach((item) => {
                                                             const { mfStockInID, stockInQuantity } = item;
-                                                            query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${stockInQuantity},2)\n`;
+                                                            query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${stockInQuantity},4)\n`;
                                                         });
 
                                                         query += '    ELSE remainingQty\nEND\n';
@@ -1192,7 +1202,7 @@ const updateMfStockOutTransaction = async (req, res) => {
                                                         console.log('orignalStockInData', remainingStockByIds);
                                                         console.log('stockInData', remainingStockByIds1);
 
-                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                                         console.log(';;;;;;;;', junoJson)
                                                         console.log('???????', updatedStockInData);
@@ -1208,7 +1218,7 @@ const updateMfStockOutTransaction = async (req, res) => {
                                                         console.log('Id Mate Jovu', filteredId);
                                                         console.log('Qty Mate Jovu', filteredQty);
 
-                                                        const combinedData = filteredId.map((id, index) => `('${mfStockOutId}','${id}',ROUND(${filteredQty[index]},2))`);
+                                                        const combinedData = filteredId.map((id, index) => `('${mfStockOutId}','${id}',${filteredQty[index]})`);
 
                                                         // Join the array elements into a single string
                                                         const stockOutWiseStockInId = combinedData.join(',');
@@ -1221,7 +1231,7 @@ const updateMfStockOutTransaction = async (req, res) => {
 
                                                             data.forEach((item) => {
                                                                 const { mfStockInID, remainingStock } = item;
-                                                                query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${remainingStock},2)\n`;
+                                                                query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${remainingStock},4)\n`;
                                                             });
 
                                                             query += '    ELSE remainingQty\nEND\n';
@@ -1482,7 +1492,7 @@ const updateMfStockOutTransaction = async (req, res) => {
                                                 console.log('orignalStockInData', remainingStockByIds);
                                                 console.log('stockInData', remainingStockByIds1);
 
-                                                const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                                 console.log(';;;;;;;;', stockInData)
                                                 console.log('???????', orignalStockInData);
@@ -1514,7 +1524,7 @@ const updateMfStockOutTransaction = async (req, res) => {
                                                 console.log('orignalStockInData', remainingStockByIds);
                                                 console.log('stockInData', remainingStockByIds1);
 
-                                                const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                                 console.log(';;;;;;;;', stockInData)
                                                 console.log('???????', orignalStockInData);
@@ -1524,7 +1534,7 @@ const updateMfStockOutTransaction = async (req, res) => {
                                                 console.log("RRRRR", remainStockCutQty);
 
                                                 // Use map to combine the arrays and format them
-                                                const combinedData = removeSameId.map((id, index) => `('${mfStockOutId}','${id}',ROUND(${remainStockCutQty[index]},2))`);
+                                                const combinedData = removeSameId.map((id, index) => `('${mfStockOutId}','${id}',${remainStockCutQty[index]})`);
 
                                                 // Join the array elements into a single string
                                                 const stockOutWiseStockInId = combinedData.join(',');
@@ -1547,7 +1557,7 @@ const updateMfStockOutTransaction = async (req, res) => {
 
                                                 data.forEach((item) => {
                                                     const { mfStockInID, stockInQuantity } = item;
-                                                    query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${stockInQuantity},2)\n`;
+                                                    query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${stockInQuantity},4)\n`;
                                                 });
 
                                                 query += '    ELSE remainingQty\nEND\n';
@@ -1700,7 +1710,7 @@ const updateMfStockOutTransaction = async (req, res) => {
                                                 console.log('orignalStockInData', remainingStockByIds);
                                                 console.log('stockInData', remainingStockByIds1);
 
-                                                const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                                 console.log(';;;;;;;;', junoJson)
                                                 console.log('???????', updatedStockInData);
@@ -1716,7 +1726,7 @@ const updateMfStockOutTransaction = async (req, res) => {
                                                 console.log('Id Mate Jovu', filteredId);
                                                 console.log('Qty Mate Jovu', filteredQty);
 
-                                                const combinedData = filteredId.map((id, index) => `('${mfStockOutId}','${id}',ROUND(${filteredQty[index]},2))`);
+                                                const combinedData = filteredId.map((id, index) => `('${mfStockOutId}','${id}',${filteredQty[index]})`);
 
                                                 // Join the array elements into a single string
                                                 const stockOutWiseStockInId = combinedData.join(',');
@@ -1729,7 +1739,7 @@ const updateMfStockOutTransaction = async (req, res) => {
 
                                                     data.forEach((item) => {
                                                         const { mfStockInID, remainingStock } = item;
-                                                        query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${remainingStock},2)\n`;
+                                                        query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${remainingStock},4)\n`;
                                                     });
 
                                                     query += '    ELSE remainingQty\nEND\n';
@@ -1877,7 +1887,7 @@ const exportExcelSheetForMfStockOut = (req, res) => {
     token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
     if (token) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const departmentId = decoded && decoded.id && decoded.id.departmentId ? decoded.id.departmentId : null;
+        const departmentId = decoded && decoded.id && decoded.id.categoryId ? decoded.id.categoryId : null;
         if (departmentId) {
             const data = {
                 startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
@@ -2065,7 +2075,7 @@ const exportPdfForMfStockOut = (req, res) => {
         token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            const departmentId = decoded && decoded.id && decoded.id.departmentId ? decoded.id.departmentId : null;
+            const departmentId = decoded && decoded.id && decoded.id.categoryId ? decoded.id.categoryId : null;
             if (departmentId) {
                 const data = {
                     startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),

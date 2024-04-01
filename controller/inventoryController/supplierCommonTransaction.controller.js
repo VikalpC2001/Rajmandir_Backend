@@ -5,6 +5,7 @@ const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const { writeFileSync, readFileSync } = require("fs");
 const fs = require('fs');
 const { Readable } = require('stream')
+const { jsPDF } = require('jspdf');
 
 // Cash Transaction Count API
 
@@ -640,7 +641,7 @@ const exportExcelSheetForOwnerDeditTransaction = (req, res) => {
 
 // Export PDF of Transaction Invoice
 
-async function createPDF(res, data) {
+async function createPDFInvoice(res, data) {
     try {
         const details = {
             invoiceNumber: data[0].invoiceNumber ? data[0].invoiceNumber.toString() : '',
@@ -786,7 +787,6 @@ async function createPDF(res, data) {
 
 const exportTransactionInvoiceData = async (req, res) => {
     try {
-        console.log('hyyy');
         const transactionId = req.query.transactionId;
         const sql_queries_getInvoiceDetails = `SELECT RIGHT(supplierTransactionId,9) AS invoiceNumber,CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS paidBy, sd.suppliertName, sd.supplierFirmName, sd.supplierPhoneNumber,receivedBy, pendingAmount, paidAmount, (pendingAmount - paidAmount) AS remainingAmount, transactionNote, DATE_FORMAT(transactionDate,'%d %M %Y, %W') AS transactionDate, DATE_FORMAT(supplierTransactionCreationDate,'%h:%i %p') AS transactionTime FROM inventory_supplierTransaction_data AS istd
                                                 INNER JOIN user_details ON user_details.userId = istd.UserId
@@ -806,7 +806,7 @@ const exportTransactionInvoiceData = async (req, res) => {
                 console.error("An error occurd in SQL Queery", err);
                 return res.status(500).send('Database Error');
             }
-            createPDF(res, data)
+            createPDFInvoice(res, data)
                 .then(() => {
                     console.log('PDF created successfully');
                     res.status(200);
@@ -822,6 +822,301 @@ const exportTransactionInvoiceData = async (req, res) => {
     }
 }
 
+// Export PDF Function
+
+async function createPDF(res, datas, sumFooterArray, tableHeading) {
+    try {
+        // Create a new PDF document
+        console.log(';;;;;;', datas);
+        console.log('?????', sumFooterArray);
+        console.log('?????', tableHeading);
+        const doc = new jsPDF();
+
+        // JSON data
+        const jsonData = datas;
+        // console.log(jsonData);
+
+        // Get the keys from the first JSON object to set as columns
+        const keys = Object.keys(jsonData[0]);
+
+        // Define columns for the auto table, including a "Serial No." column
+        const columns = [
+            { header: 'Sr.', dataKey: 'serialNo' }, // Add Serial No. column
+            ...keys.map(key => ({ header: key, dataKey: key }))
+        ]
+
+        // Convert JSON data to an array of arrays (table rows) and add a serial number
+        const data = jsonData.map((item, index) => [index + 1, ...keys.map(key => item[key]), '', '']);
+
+        // Initialize the sum columns with empty strings
+        if (sumFooterArray) {
+            data.push(sumFooterArray);
+        }
+
+        // Add auto table to the PDF document
+        doc.text(15, 15, tableHeading);
+        doc.autoTable({
+            startY: 20,
+            head: [columns.map(col => col.header)], // Extract headers correctly
+            body: data,
+            theme: 'grid',
+            styles: {
+                cellPadding: 2, // Add padding to cells for better appearance
+                halign: 'center', // Horizontally center-align content
+                fontSize: 10
+            },
+        });
+
+        const pdfBytes = await doc.output();
+        const fileName = 'jane-doe.pdf'; // Set the desired file name
+
+        // Set the response headers for the PDF download
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Type', 'application/pdf');
+
+        // Stream the PDF to the client for download
+        res.send(pdfBytes);
+
+
+        // Save the PDF to a file
+        // const pdfFilename = 'output.pdf';
+        // fs.writeFileSync(pdfFilename, doc.output());
+        // console.log(`PDF saved as ${pdfFilename}`);
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Export PDF Cash Transaction List
+
+const exportPdfForOwnerCashTransactionList = (req, res) => {
+    try {
+        var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+        var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+        var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+        console.log("1111>>>>", firstDay);
+        console.log("1111>>>>", lastDay);
+
+        const data = {
+            startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+            endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+        }
+        if (req.query.startDate && req.query.endDate) {
+            sql_queries_getdetails = `SELECT 
+                                          CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS "Paid By", 
+                                          inventory_supplier_data.supplierNickName AS "Received By", 
+                                          totalPrice AS "Paid Amount",  
+                                          DATE_FORMAT(stockInDate,'%d-%M-%Y') AS "Date", 
+                                          DATE_FORMAT(stockInCreationDate,'%h:%i %p') AS "Time" 
+                                        FROM inventory_stockIn_data
+                                        INNER JOIN user_details ON user_details.userId = inventory_stockIn_data.userId
+                                        INNER JOIN inventory_supplier_data ON inventory_supplier_data.supplierId = inventory_stockIn_data.supplierId
+                                        WHERE inventory_stockIn_data.stockInPaymentMethod = 'cash' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                        ORDER BY inventory_stockIn_data.stockInCreationDate DESC`;
+        } else {
+            sql_queries_getdetails = `SELECT 
+                                           CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS "Paid By", 
+                                           inventory_supplier_data.supplierNickName AS "Received By", 
+                                           totalPrice AS "Paid Amount",  
+                                           DATE_FORMAT(stockInDate,'%d-%M-%Y') AS "Date", 
+                                           DATE_FORMAT(stockInCreationDate,'%h:%i %p') AS "Time" 
+                                        FROM inventory_stockIn_data
+                                        INNER JOIN user_details ON user_details.userId = inventory_stockIn_data.userId
+                                        INNER JOIN inventory_supplier_data ON inventory_supplier_data.supplierId = inventory_stockIn_data.supplierId
+                                        WHERE inventory_stockIn_data.stockInPaymentMethod = 'cash' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                        ORDER BY inventory_stockIn_data.stockInCreationDate DESC`;
+        }
+        pool.query(sql_queries_getdetails, (err, rows) => {
+            if (err) {
+                console.error("An error occurd in SQL Queery", err);
+                return res.status(500).send('Database Error');
+            } else if (rows && rows.length <= 0) {
+                return res.status(400).send('No Data Found');
+            } else {
+                const abc = Object.values(JSON.parse(JSON.stringify(rows)));
+                const sumPayAmount = abc.reduce((total, item) => total + (item['Paid Amount'] || 0), 0);;
+                const sumFooterArray = ['Total', '', '', parseFloat(sumPayAmount).toLocaleString('en-IN')];
+                if (req.query.startDate && req.query.endDate) {
+                    tableHeading = `Cash Transaction From ${data.startDate} To ${data.endDate}`;
+                } else {
+                    tableHeading = `Cash Transaction From ${firstDay} To ${lastDay}`;
+                }
+
+                createPDF(res, abc, sumFooterArray, tableHeading)
+                    .then(() => {
+                        console.log('PDF created successfully');
+                        res.status(200);
+                    })
+                    .catch((err) => {
+                        console.log(err);
+                        res.status(500).send('Error creating PDF');
+                    });
+            }
+        });
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
+// Export PDF Debit Transaction List
+
+const exportPdfForOwnerDeditTransaction = (req, res) => {
+    try {
+        var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+        var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+        var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+        console.log("1111>>>>", firstDay);
+        console.log("1111>>>>", lastDay);
+
+        const data = {
+            startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+            endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+        }
+        if (req.query.startDate && req.query.endDate) {
+            sql_queries_getdetails = `SELECT 
+                                          CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS "Paid By", 
+                                          inventory_supplier_data.supplierNickName AS "Received By", 
+                                          totalPrice AS "Paid Amount",  
+                                          DATE_FORMAT(stockInDate,'%d-%M-%Y') AS "Date", 
+                                          DATE_FORMAT(stockInCreationDate,'%h:%i %p') AS "Time" 
+                                      FROM inventory_stockIn_data
+                                      INNER JOIN user_details ON user_details.userId = inventory_stockIn_data.userId
+                                      INNER JOIN inventory_supplier_data ON inventory_supplier_data.supplierId = inventory_stockIn_data.supplierId
+                                      WHERE inventory_stockIn_data.stockInPaymentMethod = 'debit' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
+                                      ORDER BY inventory_stockIn_data.stockInCreationDate DESC`;
+
+        } else {
+            sql_queries_getdetails = `SELECT 
+                                            CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS "Paid By", 
+                                            inventory_supplier_data.supplierNickName AS "Received By", 
+                                            totalPrice AS "Paid Amount",  
+                                            DATE_FORMAT(stockInDate,'%d-%M-%Y') AS "Date", 
+                                            DATE_FORMAT(stockInCreationDate,'%h:%i %p') AS "Time" 
+                                      FROM inventory_stockIn_data
+                                      INNER JOIN user_details ON user_details.userId = inventory_stockIn_data.userId
+                                      INNER JOIN inventory_supplier_data ON inventory_supplier_data.supplierId = inventory_stockIn_data.supplierId
+                                      WHERE inventory_stockIn_data.stockInPaymentMethod = 'debit' AND inventory_stockIn_data.stockInDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                      ORDER BY inventory_stockIn_data.stockInCreationDate DESC`;
+        }
+        pool.query(sql_queries_getdetails, (err, rows) => {
+            if (err) {
+                console.error("An error occurd in SQL Queery", err);
+                return res.status(500).send('Database Error');
+            } else if (rows && rows.length <= 0) {
+                return res.status(400).send('No Data Found');
+            } else {
+                const abc = Object.values(JSON.parse(JSON.stringify(rows)));
+                const sumPayAmount = abc.reduce((total, item) => total + (item['Paid Amount'] || 0), 0);;
+                const sumFooterArray = ['Total', '', '', parseFloat(sumPayAmount).toLocaleString('en-IN')];
+                if (req.query.startDate && req.query.endDate) {
+                    tableHeading = `Debit Transaction From ${data.startDate} To ${data.endDate}`;
+                } else {
+                    tableHeading = `Debit Transaction From ${firstDay} To ${lastDay}`;
+                }
+
+                createPDF(res, abc, sumFooterArray, tableHeading)
+                    .then(() => {
+                        console.log('PDF created successfully');
+                        res.status(200);
+                    })
+                    .catch((err) => {
+                        console.log(err);
+                        res.status(500).send('Error creating PDF');
+                    });
+            }
+        });
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
+// Export PDF Transaction List
+
+const exportPdfForOwnerDebitTransactionList = (req, res) => {
+    try {
+        var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+        var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+        var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+
+        console.log("1111>>>>", firstDay);
+        console.log("1111>>>>", lastDay);
+
+        const data = {
+            startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+            endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+            supplierId: req.query.supplierId
+        }
+        const sql_common_qurey = `SELECT 
+                                        RIGHT(supplierTransactionId,9) AS "Transaction Id",
+                                        CONCAT(user_details.userFirstName,' ',user_details.userLastName) AS "Paid By", 
+                                        inventory_supplier_data.supplierNickName AS "Supplier Name", 
+                                        receivedBy AS "Received By", 
+                                        pendingAmount AS "Pending Amount", 
+                                        paidAmount AS "Paid Amount", 
+                                        transactionNote AS "Note", 
+                                        DATE_FORMAT(transactionDate,'%d-%M-%Y') AS "Date", 
+                                        DATE_FORMAT(supplierTransactionCreationDate,'%h:%i %p') AS "Time" 
+                                  FROM inventory_supplierTransaction_data
+                                  INNER JOIN user_details ON user_details.userId = inventory_supplierTransaction_data.UserId
+                                  INNER JOIN inventory_supplier_data ON inventory_supplier_data.supplierId = inventory_supplierTransaction_data.supplierId`;
+        if (req.query.supplierId && req.query.startDate && req.query.endDate) {
+            sql_queries_getdetails = `${sql_common_qurey}
+                                                WHERE inventory_supplierTransaction_data.supplierId = '${data.supplierId}' AND inventory_supplierTransaction_data.transactionDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y') 
+                                                ORDER BY inventory_supplierTransaction_data.supplierTransactionCreationDate DESC`;
+        } else if (req.query.startDate && req.query.endDate) {
+            sql_queries_getdetails = `${sql_common_qurey}
+                                                WHERE inventory_supplierTransaction_data.transactionDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y') 
+                                                ORDER BY inventory_supplierTransaction_data.supplierTransactionCreationDate DESC`;
+        } else if (req.query.supplierId) {
+            sql_queries_getdetails = `${sql_common_qurey}
+                                                WHERE inventory_supplierTransaction_data.supplierId = '${data.supplierId}' AND inventory_supplierTransaction_data.transactionDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                ORDER BY inventory_supplierTransaction_data.supplierTransactionCreationDate DESC`;
+        } else {
+            sql_queries_getdetails = `${sql_common_qurey}
+                                                WHERE inventory_supplierTransaction_data.transactionDate BETWEEN STR_TO_DATE('${firstDay}','%b %d %Y') AND STR_TO_DATE('${lastDay}','%b %d %Y')
+                                                ORDER BY inventory_supplierTransaction_data.supplierTransactionCreationDate DESC`;
+        }
+        pool.query(sql_queries_getdetails, (err, rows) => {
+            if (err) {
+                console.error("An error occurd in SQL Queery", err);
+                return res.status(500).send('Database Error');
+            } else if (rows && rows.length <= 0) {
+                return res.status(400).send('No Data Found');
+            } else {
+                const abc = Object.values(JSON.parse(JSON.stringify(rows)));
+                const sumPayAmount = abc.reduce((total, item) => total + (item['Paid Amount'] || 0), 0);;
+                const sumFooterArray = ['Total', '', '', '', '', '', parseFloat(sumPayAmount).toLocaleString('en-IN')];
+                if (req.query.supplierId && req.query.startDate && req.query.endDate) {
+                    tableHeading = `Transaction List From ${data.startDate} To ${data.endDate}`;
+                } else if (req.query.startDate && req.query.endDate) {
+                    tableHeading = `Transaction List From ${data.startDate} To ${data.endDate}`;
+                } else if (req.query.supplierId) {
+                    tableHeading = `Transaction List From ${firstDay} To ${lastDay}`;
+                } else {
+                    tableHeading = `Transaction List From ${firstDay} To ${lastDay}`;
+                }
+                createPDF(res, abc, sumFooterArray, tableHeading)
+                    .then(() => {
+                        console.log('PDF created successfully');
+                        res.status(200);
+                    })
+                    .catch((err) => {
+                        console.log(err);
+                        res.status(500).send('Error creating PDF');
+                    });
+            }
+        });
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
 module.exports = {
     getOwnerDebitTransactionList,
     getOwnerCashTransactionList,
@@ -830,5 +1125,8 @@ module.exports = {
     exportExcelSheetForOwnerDebitTransactionList,
     exportExcelSheetForOwnerDeditTransaction,
     exportExcelSheetForOwnerCashTransactionList,
-    exportTransactionInvoiceData
+    exportTransactionInvoiceData,
+    exportPdfForOwnerCashTransactionList,
+    exportPdfForOwnerDeditTransaction,
+    exportPdfForOwnerDebitTransactionList
 }

@@ -41,8 +41,6 @@ const getNewTokenByBranchId = (req, res) => {
             let decodedPayload = jwt.verify(originalJwtToken, secretKey);
             decodedPayload = { ...decodedPayload, id: { ...decodedPayload.id, branchId: idToAdd } }
 
-            console.log('sss', decodedPayload);
-
             // Modify the decoded payload and get the new JWT token
             const modifiedJwtToken = modifyDecodedJwt(decodedPayload, secretKey);
 
@@ -79,8 +77,6 @@ const getNewTokenByMfProductCategoryId = (req, res) => {
             // Decode the JWT token to get its payload
             let decodedPayload = jwt.verify(originalJwtToken, secretKey);
             decodedPayload = { ...decodedPayload, id: { ...decodedPayload.id, categoryId: categoryId } }
-
-            console.log('sss', decodedPayload);
 
             // Modify the decoded payload and get the new JWT token
             const modifiedJwtToken = modifyDecodedJwt(decodedPayload, secretKey);
@@ -141,7 +137,6 @@ const getUserDetails = async (req, res) => {
                                                      ORDER BY user_rights.positionNumber LIMIT ${limit}`;
                             console.log('2');
                         }
-                        console.log(sql_querry_getdetail);
                         pool.query(sql_querry_getdetail, (err, rows, fields) => {
                             if (err) {
                                 console.error("An error occurd in SQL Queery", err);
@@ -477,7 +472,6 @@ const updateUserDetailsByOwner = async (req, res) => {
 
 const updateUserDetailsBranchOwner = async (req, res) => {
     try {
-
         let token;
         token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
         if (token) {
@@ -525,10 +519,57 @@ const updateUserDetailsBranchOwner = async (req, res) => {
     }
 }
 
+// Authenticate Password
+
+const chkPassword = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const userRights = decoded.id.rights;
+            const userId = decoded.id.id;
+            if (userRights == 1) {
+                const userPassword = req.body.userPassword ? req.body.userPassword : null;
+                if (!userPassword) {
+                    return res.status(404).send('Password Not Found');
+                }
+                sql_querry_getUserPassword = `SELECT password AS chkPassword FROM user_details WHERE userId = '${userId}'`;
+                pool.query(sql_querry_getUserPassword, (err, pass) => {
+                    if (err) {
+                        console.error("An error occurd in SQL Queery", err);
+                        return res.status(500).send('Database Error');
+                    } else {
+                        const chkPass = pass && pass[0].chkPassword ? pass[0].chkPassword : null;
+                        if (chkPass) {
+                            if (chkPass == userPassword) {
+                                return res.status(200).send('Password Match Successfully');
+                            } else {
+                                return res.status(404).send('Wrong Credential');
+                            }
+                        } else {
+                            return res.status(404).send('Password Not Found In Database');
+                        }
+                    }
+                })
+            } else {
+                return res.status(400).send('Unauthorised Person');
+            }
+        } else {
+            res.status(401);
+            res.send("Please Login Firest.....!");
+        }
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
 module.exports = {
     authUser,
     getUserDetails,
     ddlRights,
+    chkPassword,
     addUserDetailsByOwner,
     addUserDetailsByBranchOwner,
     removeUserDetails,

@@ -109,6 +109,10 @@ router.post('/updateFactorySupplierTransactionDetails', protect, rmSupplierTrans
 router.get('/exportExcelSheetForRmDeditTransaction', protect, rmSupplierTransactionRouts.exportExcelSheetForRmDeditTransaction);
 router.get('/exportExcelSheetForRmDebitTransactionList', protect, rmSupplierTransactionRouts.exportExcelSheetForRmDebitTransactionList);
 router.get('/exportExcelSheetForRmCashTransactionList', protect, rmSupplierTransactionRouts.exportExcelSheetForRmCashTransactionList);
+router.get('/exportRmSupplierTransactionInvoiceData', protect, rmSupplierTransactionRouts.exportRmSupplierTransactionInvoiceData);
+router.get('/exportPdfForRmCashTransactionList', protect, rmSupplierTransactionRouts.exportPdfForRmCashTransactionList);
+router.get('/exportPdfForRmDebitTransactionList', protect, rmSupplierTransactionRouts.exportPdfForRmDebitTransactionList);
+router.get('/exportPdfForRmDeditTransaction', protect, rmSupplierTransactionRouts.exportPdfForRmDeditTransaction);
 
 
 // Bulk Delete Raw Material Routs

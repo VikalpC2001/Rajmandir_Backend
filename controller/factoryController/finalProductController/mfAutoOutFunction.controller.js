@@ -188,7 +188,7 @@ const addRmStockOutDetailsAuto = (data) => {
 
                                     data.forEach((item) => {
                                         const { rmStockInId, stockInQuantity } = item;
-                                        query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${stockInQuantity},2)\n`;
+                                        query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${stockInQuantity},4)\n`;
                                     });
 
                                     query += '    ELSE remainingQty\nEND\n';
@@ -232,7 +232,7 @@ const addRmStockOutDetailsAuto = (data) => {
                                         console.log('orignalStockInData', remainingStockByIds);
                                         console.log('stockInData', remainingStockByIds1);
 
-                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                         console.log(';;;;;;;;', stockInData)
                                         console.log('???????', orignalStockInData);
@@ -240,7 +240,7 @@ const addRmStockOutDetailsAuto = (data) => {
                                         console.log("RRRRR", remainStockCutQty);
 
                                         // Use map to combine the arrays and format them
-                                        const combinedData = sowsiId.map((id, index) => `('${rmStockOutId}','${id}',ROUND(${remainStockCutQty[index]},2))`);
+                                        const combinedData = sowsiId.map((id, index) => `('${rmStockOutId}','${id}',${remainStockCutQty[index]})`);
 
                                         // Join the array elements into a single string
                                         const stockOutWiseStockInId = combinedData.join(',');
@@ -394,7 +394,7 @@ const addMfStockOutDetailsAuto = (data) => {
 
                                     data.forEach((item) => {
                                         const { mfStockInID, stockInQuantity } = item;
-                                        query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${stockInQuantity},2)\n`;
+                                        query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${stockInQuantity},4)\n`;
                                     });
 
                                     query += '    ELSE remainingQty\nEND\n';
@@ -438,7 +438,7 @@ const addMfStockOutDetailsAuto = (data) => {
                                         console.log('orignalStockInData', remainingStockByIds);
                                         console.log('stockInData', remainingStockByIds1);
 
-                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index].toFixed(10));
 
                                         console.log(';;;;;;;;', stockInData)
                                         console.log('???????', orignalStockInData);
@@ -446,7 +446,7 @@ const addMfStockOutDetailsAuto = (data) => {
                                         console.log("RRRRR", remainStockCutQty);
 
                                         // Use map to combine the arrays and format them
-                                        const combinedData = sowsiId.map((id, index) => `('${mfStockOutId}','${id}',ROUND(${remainStockCutQty[index]},2))`);
+                                        const combinedData = sowsiId.map((id, index) => `('${mfStockOutId}','${id}',${remainStockCutQty[index]})`);
 
                                         // Join the array elements into a single string
                                         const stockOutWiseStockInId = combinedData.join(',');
@@ -570,7 +570,6 @@ function addMfStockOutDetailsAutoPromise(jesu, mfStockInId) {
 const removeMultipleRmStockOutTransaction = (rmStockOutId) => {
     return new Promise((resolve, reject) => {
         try {
-            console.log(rmStockOutId, 'babu')
             pool.query(`SELECT rmStockOutId, rawMaterialQty FROM factory_rmStockOut_data WHERE rmStockOutId = '${rmStockOutId}'`, (err, row) => {
                 if (err) {
                     console.error("An error occurred in SQL Query", err);
@@ -670,7 +669,7 @@ const removeMultipleRmStockOutTransaction = (rmStockOutId) => {
 
                             data.forEach((item) => {
                                 const { rmStockInId, remainingStock } = item;
-                                query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${remainingStock},2)\n`;
+                                query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${remainingStock},4)\n`;
                             });
 
                             query += '    ELSE remainingQty\nEND\n';
@@ -831,7 +830,7 @@ const removeMultipleMfStockOutTransaction = (mfStockOutId) => {
 
                             data.forEach((item) => {
                                 const { mfStockInID, remainingStock } = item;
-                                query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${remainingStock},2)\n`;
+                                query += `    WHEN mfStockInID = '${mfStockInID}' THEN ROUND(${remainingStock},4)\n`;
                             });
 
                             query += '    ELSE remainingQty\nEND\n';

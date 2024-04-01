@@ -11,11 +11,17 @@ router.get('/getMfProductListCounter', protect, mfProductController.getMfProduct
 router.post('/addMfProductData', protect, mfProductController.addMfProductData);
 router.delete('/removeMfProductData', protect, mfProductController.removeMfProductData);
 router.post('/updateMfProductData', protect, mfProductController.updateMfProductData);
+router.get('/getMfUnitPreferenceById', protect, mfProductController.getMfUnitPreferenceById);
 router.get('/getmfProductDetailsById', protect, mfProductController.getmfProductDetailsById);
 router.get('/getMfProductCountDetailsById', protect, mfProductController.getMfProductCountDetailsById);
 router.get('/getOutCategoryWiseMfProductData', protect, mfProductController.getOutCategoryWiseMfProductData);
 router.get('/getOutCategoryWiseUsedByProduct', protect, mfProductController.getOutCategoryWiseUsedByProduct);
 router.get('/getDistridutorWiseSellByMfProductId', protect, mfProductController.getDistridutorWiseSellByMfProductId);
+router.get('/getStaticsOutCategoryWiseMfProductData', protect, mfProductController.getStaticsOutCategoryWiseMfProductData);
+router.get('/exportExcelSheetForMfProduct', protect, mfProductController.exportExcelSheetForMfProduct);
+router.get('/exportPdfForMfProductData', protect, mfProductController.exportPdfForMfProductData);
+router.get('/exportExcelForOutCategoryWiseMfProductData', protect, mfProductController.exportExcelForOutCategoryWiseMfProductData);
+router.get('/exportPdfForOutCategoryWiseMfProductData', protect, mfProductController.exportPdfForOutCategoryWiseMfProductData);
 
 // Manufacture Product Category Routs
 
@@ -47,6 +53,8 @@ router.get('/getAllProductDetailsByDistributorId', protect, distributorControlle
 router.post('/addDistributorDetails', protect, distributorController.addDistributorDetails);
 router.delete('/removeDistributorDetails', protect, distributorController.removeDistributorDetails);
 router.post('/updateDistributorDetails', protect, distributorController.updateDistributorDetails);
+router.get('/exportExcelSheetForAllProductDetailsByDistributorId', protect, distributorController.exportExcelSheetForAllProductDetailsByDistributorId);
+router.get('/exportPdfForAllProductDetailsByDistributorId', protect, distributorController.exportPdfForAllProductDetailsByDistributorId);
 
 // Manufacture Product StockIn Data
 
@@ -56,7 +64,6 @@ router.get('/getmfProductStockInList', protect, mfStockInController.getmfProduct
 router.get('/fillMfProductStockInData', protect, mfStockInController.fillMfProductStockInData);
 router.post('/addMfProductStockInData', protect, mfStockInController.addMfProductStockInData);
 router.delete('/removeMfProductStockInData', protect, mfStockInController.removeMfProductStockInData);
-router.post('/updateMfProductStockInData', protect, mfStockInController.updateMfProductStockInData);
 router.get('/exportExcelSheetForMfStockIn', protect, mfStockInController.exportExcelSheetForMfStockIn);
 router.get('/exportPdfForMfStockIn', protect, mfStockInController.exportPdfForMfStockIn);
 
@@ -104,6 +111,11 @@ router.get('/getdistributorDebitTransactionList', protect, distributorTransactio
 router.get('/getDistributorCashAndDebit', protect, distributorTransactionController.getDistributorCashAndDebit);
 router.get('/getDistributorCashTransactionCounter', protect, distributorTransactionController.getDistributorCashTransactionCounter);
 router.get('/getDistributorDebitTransactionCounter', protect, distributorTransactionController.getDistributorDebitTransactionCounter);
+router.get('/exportExcelForDistributorCashAndDebit', protect, distributorTransactionController.exportExcelForDistributorCashAndDebit);
+router.get('/exportExcelForDistributorDebitTransactionList', protect, distributorTransactionController.exportExcelForDistributorDebitTransactionList);
+router.get('/exportPdfForDistributorCashAndDebit', protect, distributorTransactionController.exportPdfForDistributorCashAndDebit);
+router.get('/exportPdfForDistributorDebitTransactionList', protect, distributorTransactionController.exportPdfForDistributorDebitTransactionList);
+router.get('/exportDistributorTransactionInvoiceData', protect, distributorTransactionController.exportDistributorTransactionInvoiceData);
 
 
 // DDL Final Product Routs

@@ -585,7 +585,6 @@ const fillRecipeeDataByQty = (req, res) => {
         const qty = req.query.qty ? req.query.qty : 0;
         const unit = req.query.unit;
         const batchQty = req.query.batchQty ? req.query.batchQty : 0;
-        console.log(qty, unit, 'ffffff');
 
         const sql_queries_getNeedData = `SELECT bigUnitName AS largerUnit, unitNumber AS value, smallUnitName AS smallerUnit FROM mfProduct_unit_preference mfProduct_unit_preference WHERE mfProductId = '${mfProductId}' ORDER BY mfProduct_unit_preference.priorityNumber ASC;
                                          SELECT minMfProductUnit AS  minProductUnit FROM factory_manufactureProduct_data WHERE mfProductId = '${mfProductId}';
@@ -600,9 +599,8 @@ const fillRecipeeDataByQty = (req, res) => {
                 toUnit: result && result[0] ? result[1][0].minProductUnit : null,
                 qtyBatch: result && result[0] ? result[2][0].qtyBatch : 0,
             }
-            console.log(unit, needData.toUnit, 'ffffff');
             const productFinalQty = (needData.unitsData && needData.unitsData.length !== 0) ? convertUnits(needData.unitsData, qty, unit, needData.toUnit) : qty;
-            console.log(productFinalQty, 'jarrrr')
+
             const sql_query_fillRecipeeData = `-- RAW MATERIAL RECIPEE DATA
                                                SELECT
                                                    frd.rawMaterialId,
@@ -621,7 +619,7 @@ const fillRecipeeDataByQty = (req, res) => {
                                                    factory_rawMaterialRecipee_data AS frd
                                                INNER JOIN factory_rawMaterial_data AS frmd ON frmd.rawMaterialId = frd.rawMaterialId
                                                WHERE frd.mfProductId = '${mfProductId}';
-                                               -- OTHER SOURCE RECIPEE DATA
+                                             -- OTHER SOURCE RECIPEE DATA
                                                SELECT
                                                    fosrd.otherSourceId,
                                                    fosd.otherSourceName,
@@ -633,7 +631,7 @@ const fillRecipeeDataByQty = (req, res) => {
                                                    factory_otherSourceRecipee_data AS fosrd
                                                INNER JOIN factory_otherSource_data AS fosd ON fosd.otherSourceId = fosrd.otherSourceId
                                                WHERE fosrd.mfProductId = '${mfProductId}';
-                                               -- MANUFACTURE PRODUCT RECIPEE DATA
+                                             -- MANUFACTURE PRODUCT RECIPEE DATA
                                                SELECT
                                                    mfprd.produceProductId,
                                                    mfpd.mfProductName,
@@ -644,6 +642,7 @@ const fillRecipeeDataByQty = (req, res) => {
                                                    factory_mfProductRecipee_data AS mfprd
                                                INNER JOIN factory_manufactureProduct_data AS mfpd ON mfpd.mfProductId = mfprd.produceProductId
                                                WHERE mfprd.mfProductId = '${mfProductId}'`;
+
             pool.query(sql_query_fillRecipeeData, (err, recipee) => {
                 if (err) {
                     console.error("An error occurd in SQL Queery", err);
@@ -700,7 +699,7 @@ const fillRecipeeDataByBatch = (req, res) => {
                                                    factory_rawMaterialRecipee_data AS frd
                                                INNER JOIN factory_rawMaterial_data AS frmd ON frmd.rawMaterialId = frd.rawMaterialId
                                                WHERE frd.mfProductId = '${mfProductId}';
-                                               -- OTHER SOURCE RECIPEE DATA
+                                         -- OTHER SOURCE RECIPEE DATA
                                                SELECT
                                                    fosrd.otherSourceId,
                                                    fosd.otherSourceName,
@@ -712,7 +711,7 @@ const fillRecipeeDataByBatch = (req, res) => {
                                                    factory_otherSourceRecipee_data AS fosrd
                                                INNER JOIN factory_otherSource_data AS fosd ON fosd.otherSourceId = fosrd.otherSourceId
                                                WHERE fosrd.mfProductId = '${mfProductId}';
-                                               -- MANUFACTURE PRODUCT RECIPEE DATA
+                                         -- MANUFACTURE PRODUCT RECIPEE DATA
                                                SELECT
                                                    mfprd.produceProductId,
                                                    mfpd.mfProductName,
@@ -723,7 +722,7 @@ const fillRecipeeDataByBatch = (req, res) => {
                                                    factory_mfProductRecipee_data AS mfprd
                                                INNER JOIN factory_manufactureProduct_data AS mfpd ON mfpd.mfProductId = mfprd.produceProductId
                                                WHERE mfprd.mfProductId = '${mfProductId}';
-                                               -- GET BATCH QTY BY ID
+                                         -- GET BATCH QTY BY ID
                                                SELECT (batchQty * ${batchQty}) AS batchQty, batchUnit FROM factory_batchWiseBottel_data WHERE mfProductId = '${mfProductId}'`;
         pool.query(sql_query_fillRecipeeData, (err, recipee) => {
             if (err) {

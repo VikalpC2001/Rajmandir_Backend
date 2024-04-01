@@ -766,12 +766,8 @@ const exportPdfForStockIn = (req, res) => {
                     const abc = Object.values(JSON.parse(JSON.stringify(rows)));
                     const sumPayAmount = abc.reduce((total, item) => total + (item['Total'] || 0), 0);;
                     const sumFooterArray = ['Total', '', '', '', '', parseFloat(sumPayAmount).toLocaleString('en-IN')];
-                    if (req.query.startMonth && req.query.endMonth) {
-                        const startMonthName = formatMonthYear(startMonth);
-                        console.log(startMonthName);
-                        const endMonthName = formatMonthYear(endMonth);
-                        console.log(endMonthName);
-                        tableHeading = `StockIn Data From ${startMonthName} To ${endMonthName}`;
+                    if (req.query.startDate && req.query.endDate) {
+                        tableHeading = `StockIn Data From ${data.startDate} To ${data.endDate}`;
                     } else {
                         tableHeading = `All StockIn Data`;
                     }

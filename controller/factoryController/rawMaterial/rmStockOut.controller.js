@@ -290,7 +290,7 @@ const addRmStockOutDetails = async (req, res) => {
 
                                     data.forEach((item) => {
                                         const { rmStockInId, stockInQuantity } = item;
-                                        query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${stockInQuantity},2)\n`;
+                                        query += `    WHEN rmStockInId = '${rmStockInId}' THEN ${stockInQuantity}\n`;
                                     });
 
                                     query += '    ELSE remainingQty\nEND\n';
@@ -336,7 +336,7 @@ const addRmStockOutDetails = async (req, res) => {
                                         console.log('orignalStockInData', remainingStockByIds);
                                         console.log('stockInData', remainingStockByIds1);
 
-                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                        const remainStockCutQty = remainingStockByIds.map((value, index) => (value - remainingStockByIds1[index]).toFixed(10));
 
                                         console.log(';;;;;;;;', stockInData)
                                         console.log('???????', orignalStockInData);
@@ -344,7 +344,7 @@ const addRmStockOutDetails = async (req, res) => {
                                         console.log("RRRRR", remainStockCutQty);
 
                                         // Use map to combine the arrays and format them
-                                        const combinedData = sowsiId.map((id, index) => `('${rmStockOutId}','${id}',ROUND(${remainStockCutQty[index]},2))`);
+                                        const combinedData = sowsiId.map((id, index) => `('${rmStockOutId}','${id}',${remainStockCutQty[index]})`);
 
                                         // Join the array elements into a single string
                                         const stockOutWiseStockInId = combinedData.join(',');
@@ -493,7 +493,8 @@ const removeRmStockOutTransaction = async (req, res) => {
                                                        rmStockOutId = '${rmStockOutId}'
                                                )
                                                ORDER BY
-                                                   rmStockInCreationDate ASC`;
+                                                   rmStockInDate DESC,
+                                                   rmStockInCreationDate DESC`;
                             pool.query(sql_get_sowsoid, (err, data) => {
                                 if (err) {
                                     console.error("An error occurd in SQL Queery", err);
@@ -551,7 +552,7 @@ const removeRmStockOutTransaction = async (req, res) => {
 
                                     data.forEach((item) => {
                                         const { rmStockInId, remainingStock } = item;
-                                        query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${remainingStock},2)\n`;
+                                        query += `    WHEN rmStockInId = '${rmStockInId}' THEN ${remainingStock}\n`;
                                     });
 
                                     query += '    ELSE remainingQty\nEND\n';
@@ -627,7 +628,8 @@ const removeRmStockOutTransaction = async (req, res) => {
                                         rmStockOutId = '${rmStockOutId}'
                                 )
                                 ORDER BY
-                                    stockInCreationDate ASC`;
+                                rmStockInDate DESC,
+                                rmStockInCreationDate DESC`;
                         console.log(">>><<<", sql_get_sowsoid);
                         pool.query(sql_get_sowsoid, (err, data) => {
                             if (err) {
@@ -686,7 +688,7 @@ const removeRmStockOutTransaction = async (req, res) => {
 
                                 data.forEach((item) => {
                                     const { rmStockInId, remainingStock } = item;
-                                    query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${remainingStock},2)\n`;
+                                    query += `    WHEN rmStockInId = '${rmStockInId}' THEN ${remainingStock}\n`;
                                 });
 
                                 query += '    ELSE remainingQty\nEND\n';
@@ -1048,7 +1050,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                         console.log('orignalStockInData', remainingStockByIds);
                                                         console.log('stockInData', remainingStockByIds1);
 
-                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => (value - remainingStockByIds1[index]).toFixed(10));
 
                                                         console.log(';;;;;;;;', stockInData)
                                                         console.log('???????', orignalStockInData);
@@ -1080,7 +1082,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                         console.log('orignalStockInData', remainingStockByIds);
                                                         console.log('stockInData', remainingStockByIds1);
 
-                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => (value - remainingStockByIds1[index]).toFixed(10));
 
                                                         console.log(';;;;;;;;', stockInData)
                                                         console.log('???????', orignalStockInData);
@@ -1090,7 +1092,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                         console.log("RRRRR", remainStockCutQty);
 
                                                         // Use map to combine the arrays and format them
-                                                        const combinedData = removeSameId.map((id, index) => `('${rmStockOutId}','${id}',ROUND(${remainStockCutQty[index]},2))`);
+                                                        const combinedData = removeSameId.map((id, index) => `('${rmStockOutId}','${id}',${remainStockCutQty[index]})`);
 
                                                         // Join the array elements into a single string
                                                         const stockOutWiseStockInId = combinedData.join(',');
@@ -1113,7 +1115,7 @@ const updateRmStockOutTransaction = async (req, res) => {
 
                                                         data.forEach((item) => {
                                                             const { rmStockInId, stockInQuantity } = item;
-                                                            query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${stockInQuantity},2)\n`;
+                                                            query += `    WHEN rmStockInId = '${rmStockInId}' THEN ${stockInQuantity}\n`;
                                                         });
 
                                                         query += '    ELSE remainingQty\nEND\n';
@@ -1236,7 +1238,8 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                                             rmStockOutId = '${rmStockOutId}'
                                                                     )
                                                                     ORDER BY
-                                                                        stockInCreationDate ASC`;
+                                                                        rmStockInDate DESC,
+                                                                        rmStockInCreationDate DESC`;
                                                     pool.query(sql_get_sowsoid, (err, data) => {
                                                         if (err) {
                                                             console.error("An error occurd in SQL Queery", err);
@@ -1304,7 +1307,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                         console.log('orignalStockInData', remainingStockByIds);
                                                         console.log('stockInData', remainingStockByIds1);
 
-                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                        const remainStockCutQty = remainingStockByIds.map((value, index) => (value - remainingStockByIds1[index]).toFixed(10));
 
                                                         console.log(';;;;;;;;', junoJson)
                                                         console.log('???????', updatedStockInData);
@@ -1320,7 +1323,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                         console.log('Id Mate Jovu', filteredId);
                                                         console.log('Qty Mate Jovu', filteredQty);
 
-                                                        const combinedData = filteredId.map((id, index) => `('${rmStockOutId}','${id}',ROUND(${filteredQty[index]},2))`);
+                                                        const combinedData = filteredId.map((id, index) => `('${rmStockOutId}','${id}',${filteredQty[index]})`);
 
                                                         // Join the array elements into a single string
                                                         const stockOutWiseStockInId = combinedData.join(',');
@@ -1333,7 +1336,7 @@ const updateRmStockOutTransaction = async (req, res) => {
 
                                                             data.forEach((item) => {
                                                                 const { rmStockInId, remainingStock } = item;
-                                                                query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${remainingStock},2)\n`;
+                                                                query += `    WHEN rmStockInId = '${rmStockInId}' THEN ${remainingStock}\n`;
                                                             });
 
                                                             query += '    ELSE remainingQty\nEND\n';
@@ -1686,7 +1689,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                 console.log('orignalStockInData', remainingStockByIds);
                                                 console.log('stockInData', remainingStockByIds1);
 
-                                                const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                const remainStockCutQty = remainingStockByIds.map((value, index) => (value - remainingStockByIds1[index]).toFixed(10));
 
                                                 console.log(';;;;;;;;', stockInData)
                                                 console.log('???????', orignalStockInData);
@@ -1718,7 +1721,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                 console.log('orignalStockInData', remainingStockByIds);
                                                 console.log('stockInData', remainingStockByIds1);
 
-                                                const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                const remainStockCutQty = remainingStockByIds.map((value, index) => (value - remainingStockByIds1[index]).toFixed(10));
 
                                                 console.log(';;;;;;;;', stockInData)
                                                 console.log('???????', orignalStockInData);
@@ -1728,7 +1731,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                 console.log("RRRRR", remainStockCutQty);
 
                                                 // Use map to combine the arrays and format them
-                                                const combinedData = removeSameId.map((id, index) => `('${rmStockOutId}','${id}',ROUND(${remainStockCutQty[index]},2))`);
+                                                const combinedData = removeSameId.map((id, index) => `('${rmStockOutId}','${id}',${remainStockCutQty[index]})`);
 
                                                 // Join the array elements into a single string
                                                 const stockOutWiseStockInId = combinedData.join(',');
@@ -1751,7 +1754,7 @@ const updateRmStockOutTransaction = async (req, res) => {
 
                                                 data.forEach((item) => {
                                                     const { rmStockInId, stockInQuantity } = item;
-                                                    query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${stockInQuantity},2)\n`;
+                                                    query += `    WHEN rmStockInId = '${rmStockInId}' THEN ${stockInQuantity}\n`;
                                                 });
 
                                                 query += '    ELSE remainingQty\nEND\n';
@@ -1857,7 +1860,8 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                         rmStockOutId = '${rmStockOutId}'
                                                 )
                                                 ORDER BY
-                                                    stockInCreationDate ASC`;
+                                                    rmStockInDate DESC,
+                                                    rmStockInCreationDate DESC`;
                                             console.log(">>><<<", sql_get_sowsoid);
                                             pool.query(sql_get_sowsoid, (err, data) => {
                                                 if (err) {
@@ -1926,7 +1930,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                 console.log('orignalStockInData', remainingStockByIds);
                                                 console.log('stockInData', remainingStockByIds1);
 
-                                                const remainStockCutQty = remainingStockByIds.map((value, index) => value - remainingStockByIds1[index]);
+                                                const remainStockCutQty = remainingStockByIds.map((value, index) => (value - remainingStockByIds1[index]).toFixed(10));
 
                                                 console.log(';;;;;;;;', junoJson)
                                                 console.log('???????', updatedStockInData);
@@ -1942,7 +1946,7 @@ const updateRmStockOutTransaction = async (req, res) => {
                                                 console.log('Id Mate Jovu', filteredId);
                                                 console.log('Qty Mate Jovu', filteredQty);
 
-                                                const combinedData = filteredId.map((id, index) => `('${rmStockOutId}','${id}',ROUND(${filteredQty[index]},2))`);
+                                                const combinedData = filteredId.map((id, index) => `('${rmStockOutId}','${id}',${filteredQty[index]})`);
 
                                                 // Join the array elements into a single string
                                                 const stockOutWiseStockInId = combinedData.join(',');
@@ -1955,7 +1959,7 @@ const updateRmStockOutTransaction = async (req, res) => {
 
                                                     data.forEach((item) => {
                                                         const { rmStockInId, remainingStock } = item;
-                                                        query += `    WHEN rmStockInId = '${rmStockInId}' THEN ROUND(${remainingStock},2)\n`;
+                                                        query += `    WHEN rmStockInId = '${rmStockInId}' THEN ${remainingStock}\n`;
                                                     });
 
                                                     query += '    ELSE remainingQty\nEND\n';

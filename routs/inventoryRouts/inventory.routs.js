@@ -35,6 +35,7 @@ router.get('/getSupplierCounterDetailsById', protect, supplierController.getSupp
 router.get('/getProductDetailsBySupplierId', protect, supplierController.getProductDetailsBySupplierId);
 router.get('/getAllProductDetailsBySupplierId', protect, supplierController.getAllProductDetailsBySupplierId);
 router.get('/exportExcelSheetForAllProductBySupplierId', protect, supplierController.exportExcelSheetForAllProductBySupplierId);
+router.get('/exportPdfForAllProductBySupplierId', protect, supplierController.exportPdfForAllProductBySupplierId);
 
 // StockIn Routs
 
@@ -99,6 +100,9 @@ router.get('/exportExcelSheetForCashTransactionList', protect, supplierTransacti
 router.get('/getCashTransactionCounter', protect, supplierTransactionController.getCashTransactionCounter);
 router.get('/getDebitTransactionCounter', protect, supplierTransactionController.getDebitTransactionCounter);
 router.get('/exportExcelSheetForDeditTransaction', protect, supplierTransactionController.exportExcelSheetForDeditTransaction);
+router.get('/exportPdfForCashTransactionList', protect, supplierTransactionController.exportPdfForCashTransactionList);
+router.get('/exportPdfForDebitTransactionList', protect, supplierTransactionController.exportPdfForDebitTransactionList);
+router.get('/exportPdfForDeditTransaction', protect, supplierTransactionController.exportPdfForDeditTransaction);
 
 // Supplier Common Data For Owner
 
@@ -108,6 +112,11 @@ router.get('/getOwnerAllProductDetailsBySupplierId', protect, supplierCommonCont
 router.get('/getOwnerProductDetailsBySupplierId', protect, supplierCommonController.getOwnerProductDetailsBySupplierId);
 router.get('/getOwnerSupplierCounterDetailsById', protect, supplierCommonController.getOwnerSupplierCounterDetailsById);
 router.get('/getOwnerStockInList', protect, supplierCommonController.getOwnerStockInList);
+router.get('/exportExcelSheetForOwnerAllProductBySupplierId', protect, supplierCommonController.exportExcelSheetForOwnerAllProductBySupplierId);
+router.get('/exportExcelSheetForOwnerStockIn', protect, supplierCommonController.exportExcelSheetForOwnerStockIn);
+router.get('/exportPdfForOwnerAllProductBySupplierId', protect, supplierCommonController.exportPdfForOwnerAllProductBySupplierId);
+router.get('/exportPdfForOwnerStockIn', protect, supplierCommonController.exportPdfForOwnerStockIn);
+
 // Supplier Transaction For Owner Routs
 
 const supplierCommonTransactionController = require("../../controller/inventoryController/supplierCommonTransaction.controller.js");
@@ -120,6 +129,9 @@ router.get('/exportExcelSheetForOwnerDebitTransactionList', protect, supplierCom
 router.get('/exportExcelSheetForOwnerCashTransactionList', protect, supplierCommonTransactionController.exportExcelSheetForOwnerCashTransactionList);
 router.get('/exportExcelSheetForOwnerDeditTransaction', protect, supplierCommonTransactionController.exportExcelSheetForOwnerDeditTransaction);
 router.get('/exportTransactionInvoiceData', protect, supplierCommonTransactionController.exportTransactionInvoiceData);
+router.get('/exportPdfForOwnerCashTransactionList', protect, supplierCommonTransactionController.exportPdfForOwnerCashTransactionList);
+router.get('/exportPdfForOwnerDebitTransactionList', protect, supplierCommonTransactionController.exportPdfForOwnerDebitTransactionList);
+router.get('/exportPdfForOwnerDeditTransaction', protect, supplierCommonTransactionController.exportPdfForOwnerDeditTransaction);
 
 
 // Inventory Dropdown List Routs

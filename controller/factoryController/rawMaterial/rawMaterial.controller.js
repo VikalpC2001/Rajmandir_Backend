@@ -1787,7 +1787,6 @@ const getCategoryWiseUsedByRawMaterial = (req, res) => {
                                                 LEFT JOIN factory_rawMaterial_data AS ipd ON ipd.rawMaterialId = '${data.rawMaterialId}'
                                                 ORDER BY so.usedQty DESC`
             }
-            console.log(sql_queries_getCategoryUsed);
             pool.query(sql_queries_getCategoryUsed, (err, result) => {
                 if (err) {
                     console.error("An error occurd in SQL Queery", err);
@@ -1925,7 +1924,7 @@ const exportExcelSheetForRawMaterialTable = (req, res) => {
                                                 SELECT
                                                     rawMaterialId,
                                                     rmStockInDate,
-                                                    COALESCE(CONCAT(stockInDisplayQty,' ',stockInDisplayUnit),'No IN') AS rawMaterialQty,
+                                                    COALESCE(CONCAT(rmStockInDisplayQty,' ',rmStockInDisplayUnit),'No IN') AS rawMaterialQty,
                                                     rawMaterialPrice,
                                                     totalPrice
                                                 FROM
@@ -2004,7 +2003,7 @@ const exportExcelSheetForRawMaterialTable = (req, res) => {
                                                 SELECT
                                                     rawMaterialId,
                                                     rmStockInDate,
-                                                    CONCAT(stockInDisplayQty,' ',stockInDisplayUnit) AS rawMaterialQty,
+                                                    CONCAT(rmStockInDisplayQty,' ',rmStockInDisplayUnit) AS rawMaterialQty,
                                                     rawMaterialPrice,
                                                     totalPrice
                                                 FROM
@@ -2849,7 +2848,7 @@ const exportPdfForAllRawMaterialData = (req, res) => {
                                                 SELECT
                                                     rawMaterialId,
                                                     rmStockInDate,
-                                                    COALESCE(CONCAT(stockInDisplayQty,' ',stockInDisplayUnit),'No IN') AS rawMaterialQty,
+                                                    COALESCE(CONCAT(rmStockInDisplayQty,' ',rmStockInDisplayUnit),'No IN') AS rawMaterialQty,
                                                     rawMaterialPrice,
                                                     totalPrice
                                                 FROM
@@ -2928,7 +2927,7 @@ const exportPdfForAllRawMaterialData = (req, res) => {
                                                 SELECT
                                                     rawMaterialId,
                                                     rmStockInDate,
-                                                    CONCAT(stockInDisplayQty,' ',stockInDisplayUnit) AS rawMaterialQty,
+                                                    CONCAT(rmStockInDisplayQty,' ',rmStockInDisplayUnit) AS rawMaterialQty,
                                                     rawMaterialPrice,
                                                     totalPrice
                                                 FROM
