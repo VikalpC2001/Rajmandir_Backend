@@ -17,7 +17,10 @@ const protect = asyncHandler(async (req, res, next) => {
             //SQL Code 
             const sql_querry_getdetailsById = `SELECT * FROM user_details WHERE userId = "${decoded.id.id}"`;
             pool.query(sql_querry_getdetailsById, (err, data) => {
-                if (err) return res.send(err)
+                if (err) {
+                    process.exit(1);
+                    // return res.send(err);
+                }
                 if (data[0] && data[0].userRights && data[0].userRights == decoded.id.rights) {
                     next();
                 } else {

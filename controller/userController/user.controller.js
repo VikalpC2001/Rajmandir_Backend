@@ -185,7 +185,8 @@ const authUser = async (req, res) => {
         pool.query(sql_querry_authuser, (err, data) => {
             if (err) {
                 console.error("An error occurd in SQL Queery", err);
-                return res.status(500).send('Database Error');
+                process.exit(1);
+                // return res.status(500).send('Database Error');
             }
             if (data[0] && data[0].password == user.Password) {
                 res.json({
