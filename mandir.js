@@ -3,7 +3,8 @@ const bodyparser = require('body-parser');
 const dotenv = require('dotenv').config();
 const cors = require('cors');
 const { notFound, erroHandler } = require('./middlewares/errorMiddleware');
-const https = require('https')
+const createSocketServer = require('./appSocket');
+const http = require('http')
 const fs = require('fs');
 const app = express()
 const port = process.env.PORT || 8009;
@@ -12,6 +13,8 @@ const inventoryrouter = require('./routs/inventoryRouts/inventory.routs');
 const branchrouter = require('./routs/branchRouts/branch.routs');
 const rawMaterialrouter = require('./routs/factoryRouts/rawMaterial.routs');
 const mfProductrouter = require('./routs/factoryRouts/mfProduct.routs');
+const menuItemrouter = require('./routs/menuItemRouts/item.routs');
+const billingrouter = require('./routs/billingRouts/billing.routs');
 
 // app.use(cors({
 //   credentials: true,
@@ -31,6 +34,16 @@ app.use((req, res, next) => {
     );
     next();
 });
+
+const server = http.createServer(app);
+
+const io = createSocketServer(server);
+
+app.use((req, res, next) => {
+    req.io = io;
+    next();
+});
+
 app.use(bodyparser.urlencoded({ extended: false }))
 app.use(bodyparser.json())
 
@@ -39,9 +52,11 @@ app.use('/inventoryrouter', inventoryrouter);
 app.use('/branchrouter', branchrouter);
 app.use('/rawMaterialrouter', rawMaterialrouter);
 app.use('/mfProductrouter', mfProductrouter);
+app.use('/menuItemrouter', menuItemrouter);
+app.use('/billingrouter', billingrouter);
 
 
 app.use(notFound);
 app.use(erroHandler);
 
-app.listen(port, () => console.log(`Connecion suceesfull ${port}`)) 
+server.listen(port, () => console.log(`Connection successful ${port}`));

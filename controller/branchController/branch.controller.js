@@ -24,7 +24,6 @@ const getBranchList = (req, res) => {
 
 const addBranch = async (req, res) => {
     try {
-
         const uid1 = new Date();
         const branchId = String("branchId_" + uid1.getTime());
 

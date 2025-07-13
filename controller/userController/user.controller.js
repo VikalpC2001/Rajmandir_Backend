@@ -199,10 +199,11 @@ const authUser = async (req, res) => {
                         id: data && data[0] ? data[0].userId : null,
                         rights: data && data[0] ? data[0].userRights : null,
                         userName: data && data[0] ? data[0].userFirstName + " " + data[0].userLastName : null,
+                        firstName: data && data[0] ? data[0].userFirstName : null,
                         branchId: data && data[0] ? data[0].branchId : null,
                     }),
                 });
-                console.log("??", generateToken({ id: data[0].userId, rights: data[0].userRights, branchId: data && data[0] ? data[0].branchId : null }), new Date().toLocaleString());
+                console.log("??", generateToken({ id: data[0].userId, rights: data[0].userRights, firstName: data[0].userFirstName, branchId: data && data[0] ? data[0].branchId : null }), new Date().toLocaleString());
             }
             else {
                 res.status(400);
