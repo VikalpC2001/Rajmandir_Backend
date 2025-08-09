@@ -42,6 +42,9 @@ router.get('/exportPdfForItemSalesReport', itemController.exportPdfForItemSalesR
 router.get('/getItmeDataForTouchView', itemController.getItmeDataForTouchView);
 router.get('/getItemDataByCode', itemController.getItemDataByCode);
 
+router.get('/getItemForYourName', itemController.getItemForYourName);
+router.get('/updatePreeferdname', itemController.updatePreeferdname);
+
 // Addon Group Routs
 
 const addonGroupController = require("../../controller/menuItemController/addonGroup.controller.js");

@@ -23,6 +23,7 @@ function getItemVariants(itemId, subCategoryId, menuId, callback) {
                                 SELECT 
                                     uwip.uwpId AS uwpId,
                                     uwip.unit AS unit,
+                                    uwip.preferredName AS preferredName,
                                     uwip.price AS price,
                                     uwip.status AS status,
                                     uwaog.groupId AS groupId,
@@ -38,7 +39,7 @@ function getItemVariants(itemId, subCategoryId, menuId, callback) {
                                 LEFT JOIN item_addonsGroup_data AS uwg ON uwg.groupId = uwaog.groupId
                                 LEFT JOIN item_addons_data AS iad ON iad.groupId = uwaog.groupId
                                 WHERE uwip.itemId = '${itemId}' AND uwip.menuCategoryId = '${menuId}' AND status = 1
-                                ORDER BY FIELD(unit, 'No', 'HP', 'Kg');
+                                ORDER BY FIELD(unit, 'No', '100 Gm', '250 Gm', '500 Gm', '750 Gm','1 Kg');
                             -- GET PERIOD
                                 SELECT 
                                 startTime, 
@@ -48,7 +49,7 @@ function getItemVariants(itemId, subCategoryId, menuId, callback) {
                                 FROM item_subCategoryPeriod_data 
                                 WHERE subCategoryId = '${subCategoryId}';
                             -- GET ALL VARIANTS
-                                SELECT uwpId, unit, price, status
+                                SELECT uwpId, unit, preferredName, price, status
                                 FROM item_unitWisePrice_data
                                 WHERE itemId = '${itemId}' AND menuCategoryId = '${menuId}'`;
 
@@ -69,6 +70,7 @@ function getItemVariants(itemId, subCategoryId, menuId, callback) {
                     acc[unitKey] = {
                         uwpId: item.uwpId,
                         unit: item.unit,
+                        preferredName: item.preferredName,
                         price: item.price,
                         status: item.status,
                         addOnsList: {}
@@ -101,6 +103,7 @@ function getItemVariants(itemId, subCategoryId, menuId, callback) {
             const result = Object.values(groupedData).map(unit => ({
                 uwpId: unit.uwpId,
                 unit: unit.unit,
+                preferredName: unit.preferredName,
                 price: unit.price,
                 status: unit.status,
                 addOnsList: Object.keys(unit.addOnsList).length > 0 ? Object.values(unit.addOnsList) : [] // Check for empty addOnsList

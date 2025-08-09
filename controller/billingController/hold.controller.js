@@ -123,20 +123,22 @@ const getHoldBillDataById = (req, res) => {
                                                             hold_data AS hd
                                                         WHERE hd.holdId = '${holdId}'`;
                             let sql_query_getBillwiseItem = `SELECT
-                                                             hwid.iwbId AS iwbId,
-                                                             hwid.itemId AS itemId,
-                                                             imd.itemName AS itemName,
-                                                             imd.itemGujaratiName AS itemGujaratiName,
-                                                             imd.itemCode AS inputCode,
-                                                             hwid.qty AS qty,
-                                                             hwid.unit AS unit,
-                                                             hwid.itemPrice AS itemPrice,
-                                                             hwid.price AS price,
-                                                             hwid.comment AS comment
-                                                         FROM
-                                                             hold_billWiseItem_data AS hwid
-                                                         INNER JOIN item_menuList_data AS imd ON imd.itemId = hwid.itemId
-                                                         WHERE hwid.holdId = '${holdId}'`;
+                                                                 hwid.iwbId AS iwbId,
+                                                                 hwid.itemId AS itemId,
+                                                                 imd.itemName AS itemName,
+                                                                 imd.itemGujaratiName AS itemGujaratiName,
+                                                                 uwp.preferredName AS preferredName,
+                                                                 imd.itemCode AS inputCode,
+                                                                 hwid.qty AS qty,
+                                                                 hwid.unit AS unit,
+                                                                 hwid.itemPrice AS itemPrice,
+                                                                 hwid.price AS price,
+                                                                 hwid.comment AS comment
+                                                             FROM
+                                                                 hold_billWiseItem_data AS hwid
+                                                             INNER JOIN item_menuList_data AS imd ON imd.itemId = hwid.itemId
+                                                             LEFT JOIN item_unitWisePrice_data AS uwp ON uwp.itemId = hwid.itemId AND uwp.unit = hwid.unit
+                                                             WHERE hwid.holdId = '${holdId}'`;
                             let sql_query_getItemWiseAddons = `SELECT
                                                                    iwad.iwaId AS iwaId,
                                                                    iwad.iwbId AS iwbId,

@@ -763,6 +763,7 @@ const getItmeDataForTouchView = (req, res) => {
                                            imd.itemShortKey AS itemShortKey,
                                            imd.itemSubCategory AS itemSubCategory,
                                            iscd.subCategoryName AS subCategoryName,
+                                           iscd.displayRank AS displayRank,
                                            imd.spicyLevel AS spicyLevel,
                                            imd.isJain AS isJain,
                                            imd.isPureJain AS isPureJain,
@@ -773,7 +774,7 @@ const getItmeDataForTouchView = (req, res) => {
                                        INNER JOIN item_subCategory_data AS iscd ON iscd.subCategoryId = imd.itemSubCategory`;
         let sql_querry_getItem = `${sql_query_staticQuery}
                                   WHERE imd.itemName LIKE '%` + searchWord + `%'
-                                  ORDER BY iscd.subCategoryName ASC, imd.itemName ASC;
+                                  ORDER BY iscd.displayRank ASC, imd.itemName ASC;
                                   ${sql_query_staticQuery}
                                   WHERE imd.isFavourite = 1
                                   ORDER BY imd.itemName ASC;`;
@@ -909,6 +910,61 @@ const getItemDataByCode = (req, res) => {
     }
 }
 
+// Get Item Data
+
+const getItemForYourName = (req, res) => {
+    try {
+        let sql_query_getData = `SELECT
+                                     uwp.uwpId AS uwpId,
+                                     uwp.itemId AS itemId,
+                                     scd.subCategoryName AS subCategoryName, 
+                                     CONCAT(imld.itemName, ' (', uwp.unit, ')') AS itemName,
+                                     uwp.preferredName AS preferredName
+                                 FROM
+                                     item_unitWisePrice_data AS uwp
+                                 LEFT JOIN item_menuList_data AS imld ON imld.itemId = uwp.itemId
+                                 LEFT JOIN item_subCategory_data AS scd ON scd.subCategoryId = imld.itemSubCategory
+                                 WHERE menuCategoryId = 'base_2001'
+                                 ORDER BY imld.itemName ASC, FIELD(unit, 'No', '100 Gm', '250 Gm', '500 Gm', '750 Gm','1 Kg')`;
+        pool.query(sql_query_getData, (err, data) => {
+            if (err) {
+                console.error("An error occurred in SQL Queery", err);
+                return res.status(500).send('Database Error');
+            } else {
+                return res.status(200).send(data);
+            }
+        })
+    } catch (error) {
+        console.error('An error occurred', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Update 
+
+const updatePreeferdname = (req, res) => {
+    try {
+        const uwpId = req.query.uwpId ? req.query.uwpId : null;
+        const preferredName = req.query.preferredName ? req.query.preferredName : null;
+        if (!uwpId || !preferredName) {
+            return res.status(404).send('Please Fill All The Fields');
+        } else {
+            let sql_query_updatePname = `UPDATE item_unitWisePrice_data SET preferredName = ${preferredName} WHERE uwpId = ${uwpId}`;
+            pool.query(sql_query_updatePname, (err, data) => {
+                if (err) {
+                    console.error("An error occurred in SQL Queery", err);
+                    return res.status(500).send('Database Error');
+                } else {
+                    return res.status(200).send("Updated Successs");
+                }
+            })
+        }
+    } catch (error) {
+        console.error('An error occurred', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
 module.exports = {
     getItemData,
     addItemData,
@@ -920,5 +976,7 @@ module.exports = {
     updateItemPriceByMenuId,
     exportPdfForItemSalesReport,
     getItmeDataForTouchView,
-    getItemDataByCode
+    getItemDataByCode,
+    getItemForYourName,
+    updatePreeferdname
 }

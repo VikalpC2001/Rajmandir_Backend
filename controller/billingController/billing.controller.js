@@ -183,20 +183,22 @@ const getLiveViewByCategoryId = (req, res) => {
                                                         LEFT JOIN billing_onlineUPI_data AS boud ON boud.onlineId = bwu.onlineId
                                                         WHERE bd.billId = '${billId}'`;
                             let sql_query_getBillwiseItem = `SELECT
-                                                             bwid.iwbId AS iwbId,
-                                                             bwid.itemId AS itemId,
-                                                             imd.itemName AS itemName,
-                                                             imd.itemGujaratiName AS itemGujaratiName,
-                                                             imd.itemCode AS inputCode,
-                                                             bwid.qty AS qty,
-                                                             bwid.unit AS unit,
-                                                             bwid.itemPrice AS itemPrice,
-                                                             bwid.price AS price,
-                                                             bwid.comment AS comment
-                                                         FROM
-                                                             billing_billWiseItem_data AS bwid
-                                                         INNER JOIN item_menuList_data AS imd ON imd.itemId = bwid.itemId
-                                                         WHERE bwid.billId = '${billId}'`;
+                                                                 bwid.iwbId AS iwbId,
+                                                                 bwid.itemId AS itemId,
+                                                                 imd.itemName AS itemName,
+                                                                 imd.itemGujaratiName AS itemGujaratiName,
+                                                                 uwp.preferredName AS preferredName,
+                                                                 imd.itemCode AS inputCode,
+                                                                 bwid.qty AS qty,
+                                                                 bwid.unit AS unit,
+                                                                 bwid.itemPrice AS itemPrice,
+                                                                 bwid.price AS price,
+                                                                 bwid.comment AS comment
+                                                             FROM
+                                                                 billing_billWiseItem_data AS bwid
+                                                             INNER JOIN item_menuList_data AS imd ON imd.itemId = bwid.itemId
+                                                             LEFT JOIN item_unitWisePrice_data AS uwp ON uwp.itemId = bwid.itemId AND uwp.unit = bwid.unit
+                                                             WHERE bwid.billId = '${billId}'`;
                             let sql_query_getItemWiseAddons = `SELECT
                                                                iwad.iwaId AS iwaId,
                                                                iwad.iwbId AS iwbId,
@@ -464,6 +466,7 @@ const getBillDataByToken = (req, res) => {
                                                                              bwid.itemId AS itemId,
                                                                              imd.itemName AS itemName,
                                                                              imd.itemGujaratiName AS itemGujaratiName,
+                                                                             uwp.preferredName AS preferredName,
                                                                              imd.itemCode AS inputCode,
                                                                              bwid.qty AS qty,
                                                                              bwid.unit AS unit,
@@ -473,6 +476,7 @@ const getBillDataByToken = (req, res) => {
                                                                          FROM
                                                                              billing_billWiseItem_data AS bwid
                                                                          INNER JOIN item_menuList_data AS imd ON imd.itemId = bwid.itemId
+                                                                         LEFT JOIN item_unitWisePrice_data AS uwp ON uwp.itemId = bwid.itemId AND uwp.unit = bwid.unit
                                                                          WHERE bwid.billId = '${billId}'`;
                                         let sql_query_getItemWiseAddons = `SELECT
                                                                                iwad.iwaId AS iwaId,
@@ -630,20 +634,22 @@ const getBillDataById = (req, res) => {
                                                         LEFT JOIN billing_onlineUPI_data AS boud ON boud.onlineId = bwu.onlineId
                                                         WHERE bd.billId = '${billId}'`;
                             let sql_query_getBillwiseItem = `SELECT
-                                                             bwid.iwbId AS iwbId,
-                                                             bwid.itemId AS itemId,
-                                                             imd.itemName AS itemName,
-                                                             imd.itemGujaratiName AS itemGujaratiName,
-                                                             imd.itemCode AS inputCode,
-                                                             bwid.qty AS qty,
-                                                             bwid.unit AS unit,
-                                                             bwid.itemPrice AS itemPrice,
-                                                             bwid.price AS price,
-                                                             bwid.comment AS comment
-                                                         FROM
-                                                             billing_billWiseItem_data AS bwid
-                                                         INNER JOIN item_menuList_data AS imd ON imd.itemId = bwid.itemId
-                                                         WHERE bwid.billId = '${billId}'`;
+                                                                 bwid.iwbId AS iwbId,
+                                                                 bwid.itemId AS itemId,
+                                                                 imd.itemName AS itemName,
+                                                                 imd.itemGujaratiName AS itemGujaratiName,
+                                                                 uwp.preferredName AS preferredName,
+                                                                 imd.itemCode AS inputCode,
+                                                                 bwid.qty AS qty,
+                                                                 bwid.unit AS unit,
+                                                                 bwid.itemPrice AS itemPrice,
+                                                                 bwid.price AS price,
+                                                                 bwid.comment AS comment
+                                                             FROM
+                                                                 billing_billWiseItem_data AS bwid
+                                                             INNER JOIN item_menuList_data AS imd ON imd.itemId = bwid.itemId
+                                                             LEFT JOIN item_unitWisePrice_data AS uwp ON uwp.itemId = bwid.itemId AND uwp.unit = bwid.unit
+                                                             WHERE bwid.billId = '${billId}'`;
                             let sql_query_getItemWiseAddons = `SELECT
                                                                    iwad.iwaId AS iwaId,
                                                                    iwad.iwbId AS iwbId,
