@@ -92,4 +92,11 @@ router.delete('/removeCustomerAccount', protect, upiConntroller.removeUPI);
 router.post('/updateCustomerAccount', protect, upiConntroller.updateUPI);
 router.get('/ddlUPI', protect, upiConntroller.ddlUPI);
 
+// settle
+
+const settleController = require("../../controller/billingController/settle.controller.js");
+
+router.get('/dryRunSettleBills', settleController.dryRunSettleBills);
+router.get('/settleBills', settleController.settleBills);
+
 module.exports = router;
