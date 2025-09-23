@@ -185,29 +185,28 @@ const authUser = async (req, res) => {
         pool.query(sql_querry_authuser, (err, data) => {
             if (err) {
                 console.error("An error occurd in SQL Queery", err);
-                process.exit(1);
-                // return res.status(500).send('Database Error');
-            }
-            if (data[0] && data[0].password == user.Password) {
-                res.json({
-                    userId: data && data[0] ? data[0].userId : null,
-                    userRights: data && data[0] ? data[0].userRights : null,
-                    userName: data && data[0] ? data[0].userFirstName + " " + data[0].userLastName : null,
-                    branchId: data && data[0] ? data[0].branchId : null,
-                    branchName: data && data[0] ? data[0].branchName : null,
-                    token: generateToken({
-                        id: data && data[0] ? data[0].userId : null,
-                        rights: data && data[0] ? data[0].userRights : null,
+                return res.status(500).send('Database Error');
+            } else {
+                if (data[0] && data[0].password == user.Password) {
+                    res.json({
+                        userId: data && data[0] ? data[0].userId : null,
+                        userRights: data && data[0] ? data[0].userRights : null,
                         userName: data && data[0] ? data[0].userFirstName + " " + data[0].userLastName : null,
-                        firstName: data && data[0] ? data[0].userFirstName : null,
                         branchId: data && data[0] ? data[0].branchId : null,
-                    }),
-                });
-                console.log("??", generateToken({ id: data[0].userId, rights: data[0].userRights, firstName: data[0].userFirstName, branchId: data && data[0] ? data[0].branchId : null }), new Date().toLocaleString());
-            }
-            else {
-                res.status(400);
-                res.send("Invalid Email or Password");
+                        branchName: data && data[0] ? data[0].branchName : null,
+                        token: generateToken({
+                            id: data && data[0] ? data[0].userId : null,
+                            rights: data && data[0] ? data[0].userRights : null,
+                            userName: data && data[0] ? data[0].userFirstName + " " + data[0].userLastName : null,
+                            firstName: data && data[0] ? data[0].userFirstName : null,
+                            branchId: data && data[0] ? data[0].branchId : null,
+                        }),
+                    });
+                    console.log("??", generateToken({ id: data[0].userId, rights: data[0].userRights, firstName: data[0].userFirstName, branchId: data && data[0] ? data[0].branchId : null }), new Date().toLocaleString());
+                }
+                else {
+                    res.status(400).send("Invalid Email or Password");
+                }
             }
         })
     } catch (error) {

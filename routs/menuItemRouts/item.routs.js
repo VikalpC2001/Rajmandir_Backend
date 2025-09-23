@@ -47,22 +47,13 @@ router.get('/updatePreeferdname', itemController.updatePreeferdname);
 
 // Addon Group Routs
 
-const addonGroupController = require("../../controller/menuItemController/addonGroup.controller.js");
-
-router.get('/getAddOnsGroupList', protect, addonGroupController.getAddOnsGroupList);
-router.post('/addAddOnsGroupData', protect, addonGroupController.addAddOnsGroupData);
-router.delete('/removeAddOnsGgroupData', protect, addonGroupController.removeAddOnsGgroupData);
-router.post('/updateAddOnsGroupData', protect, addonGroupController.updateAddOnsGroupData);
-router.get('/getItemListByAddon', protect, addonGroupController.getItemListByAddon);
-router.post('/assignAddonGroup', protect, addonGroupController.assignAddonGroup);
-
-// Addon Routs
-
 const addonController = require("../../controller/menuItemController/addon.controller.js");
 
-router.get('/getAddOnsList', protect, addonController.getAddOnsList);
-router.post('/addAddOnsData', protect, addonController.addAddOnsData);
-router.delete('/removeAddOnsData', protect, addonController.removeAddOnsData);
-router.post('/updateAddOnsData', protect, addonController.updateAddOnsData);
+router.get('/getAddOnsGroupList', protect, addonController.getAddOnsGroupList);
+router.post('/addAddonGroupData', protect, addonController.addAddonGroupData);
+router.delete('/removeAddonGroupData', protect, addonController.removeAddonGroupData);
+router.post('/updateAddonGroupData', protect, addonController.updateAddonGroupData);
+router.get('/getItemListByAddon', protect, addonController.getItemListByAddon);
+router.post('/assignAddonGroup', protect, addonController.assignAddonGroup);
 
 module.exports = router;

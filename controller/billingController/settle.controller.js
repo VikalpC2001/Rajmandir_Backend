@@ -30,8 +30,8 @@ const dryRunSettleBills = (req, res) => {
             const bills = await queryAsync(
                 conn,
                 `SELECT * FROM billing_data 
-         WHERE billDate BETWEEN ? AND ? 
-         ORDER BY totalAmount DESC`,
+                 WHERE billDate BETWEEN ? AND ? 
+                 ORDER BY totalAmount DESC`,
                 [fromDate, toDate]
             );
 
@@ -46,7 +46,7 @@ const dryRunSettleBills = (req, res) => {
                 const items = await queryAsync(
                     conn,
                     `SELECT * FROM billing_billWiseItem_data 
-           WHERE billId = ? ORDER BY price DESC`,
+                     WHERE billId = ? ORDER BY price DESC`,
                     [bill.billId]
                 );
                 bill.items = items;
@@ -165,7 +165,6 @@ const settleBills = (req, res) => {
             console.error("DB connection error:", err);
             return res.status(500).json({ message: "DB connection error" });
         }
-
         try {
             await queryAsync(conn, "START TRANSACTION");
 

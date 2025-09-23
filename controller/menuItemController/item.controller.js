@@ -217,13 +217,13 @@ const addItemData = (req, res) => {
 
                                             let addvariants = menuCategoryList.map((menuId, index) => {
                                                 const tempData = variantJson.map((item, index) => {
-                                                    return `('${menuId.menuCategoryId}', '${itemId}', '${item.unit}', ${item.price}, ${item.status})`;
+                                                    return `('${menuId.menuCategoryId}', '${itemId}', ${item.preferredName ? `TRIM('${item.preferredName}')` : null}, '${item.unit}', ${item.price}, ${item.status})`;
                                                 })
                                                 return tempData.join(', ')
                                             })
 
                                             const newAddvarients = addvariants.join(', ');
-                                            let sql_querry_addVariants = `INSERT INTO item_unitWisePrice_data (menuCategoryId, itemId, unit, price, status)
+                                            let sql_querry_addVariants = `INSERT INTO item_unitWisePrice_data (menuCategoryId, itemId, preferredName, unit, price, status)
                                                                           VALUES ${newAddvarients}`;
                                             conn.query(sql_querry_addVariants, (err, variant) => {
                                                 if (err) {
@@ -396,11 +396,11 @@ const updateItemData = (req, res) => {
                                                     const variantJson = itemData.variantsList;
 
                                                     const addvariants = variantJson.map((item, index) => {
-                                                        return `('${itemData.menuCategoryId}', '${itemData.itemId}', '${item.unit}', ${item.price}, ${item.status})`;
+                                                        return `('${itemData.menuCategoryId}', '${itemData.itemId}', ${item.preferredName ? `TRIM('${item.preferredName}')` : null}, '${item.unit}', ${item.price}, ${item.status})`;
                                                     })
 
                                                     const newAddvarients = addvariants.join(', ');
-                                                    let sql_querry_addVariants = `INSERT INTO item_unitWisePrice_data (menuCategoryId, itemId, unit, price, status)
+                                                    let sql_querry_addVariants = `INSERT INTO item_unitWisePrice_data (menuCategoryId, itemId, preferredName, unit, price, status)
                                                                                   VALUES ${newAddvarients}`;
                                                     conn.query(sql_querry_addVariants, (err, variant) => {
                                                         if (err) {
