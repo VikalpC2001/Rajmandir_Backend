@@ -32,7 +32,7 @@ const getAddOnsGroupList = async (req, res) => {
                                             g.groupGujaratiName AS groupGujaratiName,
                                             a.addonsId AS addonId, 
                                             a.addonsName AS addonName, 
-                                            a.addonGujaratiName AS addonGujaratiName, 
+                                            a.addonsGujaratiName AS addonGujaratiName, 
                                             a.price AS price, 
                                             a.isActive AS isActive
                                        FROM item_addonsGroup_data g

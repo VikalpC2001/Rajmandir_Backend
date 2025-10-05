@@ -631,7 +631,7 @@ const removeMfProductStockOutTransaction = async (req, res) => {
                         console.error("An error occurd in SQL Queery", err);
                         return res.status(500).send('Database Error');
                     }
-                    const prevoiusQuantity = row[0].mfProductQty;
+                    const prevoiusQuantity = row && row[0] ? row[0].mfProductQty : 0;
                     if (row && row.length) {
                         sql_get_sowsoid = `SELECT
                                                factory_mfProductStockIn_data.mfStockInID,

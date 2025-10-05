@@ -459,6 +459,7 @@ const getDistributorCashAndDebit = (req, res) => {
                     const numPages = Math.ceil(numRows / numPerPage);
                     const sql_common_qurey = `SELECT
                                                       fdwod.outDataId,
+                                                      fdwod.mfStockOutId,
                                                       user_details.userName AS enteredBy,
                                                       CONCAT(
                                                           user_details.userFirstName,
