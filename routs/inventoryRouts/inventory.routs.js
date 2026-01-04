@@ -21,6 +21,7 @@ router.get('/getUnitPreferenceById', protect, productController.getUnitPreferenc
 router.get('/exportPdfForAllProductsData', protect, productController.exportPdfForAllProductsData);
 router.get('/getOutStockByCategory', protect, productController.getOutStockByCategory);
 router.get('/exportPdfOutStockByCategory', protect, productController.exportPdfOutStockByCategory);
+router.get('/exportExcelOutStockByCategory', protect, productController.exportExcelOutStockByCategory);
 
 // Supplier Routs
 

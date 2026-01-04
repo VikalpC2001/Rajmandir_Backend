@@ -3314,7 +3314,7 @@ const exportPdfOutStockByCategory = (req, res) => {
                                                         p.productName,
                                                         p.minProductUnit,
                                                         COALESCE(SUM(s.productQty), 0) AS remainingStock,
-                                                        COALESCE(SUM(s.stockOutPrice), 0) AS totalOutPrice
+                                                        COALESCE(ROUND(SUM(s.stockOutPrice)), 0) AS totalOutPrice
                                                     FROM inventory_product_data p
                                                     LEFT JOIN inventory_stockOut_data s ON s.productId = p.productId 
                                                     AND s.branchId = '${branchId}'
@@ -3382,6 +3382,150 @@ const exportPdfOutStockByCategory = (req, res) => {
     }
 }
 
+// Export Excel for StockIn
+
+const exportExcelOutStockByCategory = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+            if (branchId) {
+                var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+                var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+                var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+                const data = {
+                    startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                    endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                    searchProduct: req.query.searchProduct,
+                    productCategory: req.query.productCategory,
+                    outCategory: req.query.outCategory
+                }
+                if (!data.productCategory || !data.outCategory) {
+                    return res.status(404).send('Please Fill All The Fields....!')
+                } else {
+                    const sql_queries_getdetails = `SELECT
+                                                        p.productId,
+                                                        p.productName,
+                                                        p.minProductUnit,
+                                                        COALESCE(SUM(s.productQty), 0) AS remainingStock,
+                                                        COALESCE(ROUND(SUM(s.stockOutPrice)), 0) AS totalOutPrice
+                                                    FROM inventory_product_data p
+                                                    LEFT JOIN inventory_stockOut_data s ON s.productId = p.productId 
+                                                    AND s.branchId = '${branchId}'
+                                                    AND s.stockOutCategory = '${data.outCategory}'
+                                                    AND s.stockOutDate BETWEEN STR_TO_DATE('${data.startDate ? data.startDate : firstDay}','%b %d %Y') AND STR_TO_DATE('${data.endDate ? data.endDate : lastDay}','%b %d %Y')
+                                                    WHERE p.productCategoryId = '${data.productCategory}'
+                                                    GROUP BY p.productId, p.productName
+                                                    ORDER BY p.productName ASC;
+                                                    SELECT stockOutCategoryName FROM inventory_stockOutCategory_data
+                                                    WHERE stockOutCategoryId = '${data.outCategory}'`;
+                    pool.query(sql_queries_getdetails, async (err, datas) => {
+                        if (err) {
+                            console.error("An error occurd in SQL Queery", err);
+                            return res.status(500).send('Database Error');
+                        } else {
+                            if (datas[0].length === 0) {
+                                return res.status(200).send('No Data Found');
+                            } else {
+                                processDatas(datas[0])
+                                    .then(async (data) => {
+                                        const rows = datas && datas[0] ? datas[0].map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
+                                        ) : []
+                                        console.log(rows);
+                                        const extractedData = rows.map(p => {
+                                            return {
+                                                "Product Name": p.productName,
+                                                "Total OUT": p.remainingStock,
+                                                "OUT Price": p.totalOutPrice
+                                            };
+                                        });
+                                        const cat = datas?.[1]?.[0]?.stockOutCategoryName;
+
+                                        const workbook = new excelJS.Workbook();  // Create a new workbook
+                                        const worksheet = workbook.addWorksheet("StockOut List"); // New Worksheet
+
+                                        const tableHeading = req.query.startDate && req.query.endDate
+                                            ? `Product Out Data From ${req.query.startDate.slice(4, 15)} To ${req.query.endDate.slice(4, 15)}${cat ? ` [${cat}]` : ''}`
+                                            : `Product Out Data From ${firstDay} To ${lastDay}${cat ? ` [${cat}]` : ''}`;
+
+                                        worksheet.mergeCells('A1', 'C1');
+                                        worksheet.getCell('A1').value = tableHeading;
+
+                                        /*Column headers*/
+                                        worksheet.getRow(2).values = ['S no.', 'Product Name', 'Total OUT', 'OUT Price'];
+
+                                        // Column for data in excel. key must match data key
+                                        worksheet.columns = [
+                                            { key: "s_no", width: 10 },
+                                            { key: "Product Name", width: 30 },
+                                            { key: "Total OUT", width: 20 },
+                                            { key: "OUT Price", width: 15 }
+                                        ];
+                                        //Looping through User data
+                                        const arr = extractedData;
+                                        console.log(">>>", arr);
+                                        let counter = 1;
+                                        arr.forEach((item, index) => {
+                                            item.s_no = counter;
+                                            const row = worksheet.addRow(item); // Add data in worksheet
+                                            counter++;
+                                        });
+                                        // Making first line in excel bold
+                                        worksheet.getRow(1).eachCell((cell) => {
+                                            cell.font = { bold: true, size: 13 }
+                                            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                        });
+                                        worksheet.getRow(2).eachCell((cell) => {
+                                            cell.font = { bold: true, size: 13 }
+                                            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                        });
+                                        worksheet.getRow(1).height = 30;
+                                        worksheet.getRow(2).height = 20;
+                                        worksheet.getRow(arr.length + 3).values = ['Total:', '', '', { formula: `SUM(D3:D${arr.length + 2})` }];
+                                        worksheet.getRow(arr.length + 3).eachCell((cell) => {
+                                            cell.font = { bold: true, size: 14 }
+                                            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                                        })
+                                        worksheet.eachRow((row) => {
+                                            row.eachCell((cell) => {
+                                                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                                                row.height = 20
+                                            });
+                                        });
+                                        try {
+                                            const excelData = await workbook.xlsx.writeBuffer()
+                                            var fileName = new Date().toString().slice(4, 15) + ".xlsx";
+                                            console.log(">>>", fileName);
+                                            res.contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                                            res.type = 'blob';
+                                            res.send(excelData)
+                                        } catch (err) {
+                                            throw new Error(err);
+                                        }
+
+                                    }).catch(error => {
+                                        console.error('Error in processing datas :', error);
+                                        return res.status(500).send('Internal Error');
+                                    });
+                            }
+                        }
+                    });
+                }
+            } else {
+                return res.status(401).send("BranchId Not Found");
+            }
+        } else {
+            return res.status(401).send("Please Login Firest.....!");
+        }
+
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+};
+
 module.exports = {
     addProduct,
     getProductListCounter,
@@ -3397,5 +3541,6 @@ module.exports = {
     getUnitPreferenceById,
     exportPdfForAllProductsData,
     getOutStockByCategory,
-    exportPdfOutStockByCategory
+    exportPdfOutStockByCategory,
+    exportExcelOutStockByCategory
 }
