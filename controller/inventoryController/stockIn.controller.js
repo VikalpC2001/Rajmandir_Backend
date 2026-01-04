@@ -175,9 +175,6 @@ const getStockInList = async (req, res) => {
                                 console.error("An error occurd in SQL Queery", err);
                                 return res.status(500).send('Database Error');;
                             } else {
-                                console.log(rows);
-                                console.log(numRows);
-                                console.log("Total Page :-", numPages);
                                 if (numRows === 0) {
                                     const rows = [{
                                         'msg': 'No Data Found'

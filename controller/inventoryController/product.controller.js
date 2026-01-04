@@ -1456,9 +1456,6 @@ const getProductDetailsTable = (req, res) => {
                                 console.error("An error occurd in SQL Queery", err);
                                 return res.status(500).send('Database Error');;
                             } else {
-                                console.log(rows);
-                                console.log(numRows);
-                                console.log("Total Page :-", numPages);
                                 if (numRows === 0) {
                                     const rows = [{
                                         'msg': 'No Data Found'
@@ -1469,7 +1466,6 @@ const getProductDetailsTable = (req, res) => {
                                     processDatas(datas)
                                         .then((data) => {
                                             const rows = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity, allConversation: data[index].vikJson } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit, allConversation: data[index].vikJson },
-                                                // console.log(data[index] && data[index].convertedQuantity)
                                             ) : []
                                             let newData = [];
                                             Promise.all(
@@ -3218,6 +3214,174 @@ const exportPdfForAllProductsData = (req, res) => {
     }
 }
 
+// Get Product Out Stock By Category
+
+const getOutStockByCategory = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+            if (branchId) {
+                var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+                var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+                var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+                const data = {
+                    startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                    endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                    searchProduct: req.query.searchProduct,
+                    productCategory: req.query.productCategory,
+                    outCategory: req.query.outCategory
+                }
+                if (!data.productCategory || !data.outCategory) {
+                    return res.status(404).send('Please Fill All The Fields....!')
+                }
+                else {
+                    const sql_queries_getdetails = `SELECT
+                                                        p.productId,
+                                                        p.productName,
+                                                        p.minProductUnit,
+                                                        COALESCE(SUM(s.productQty), 0) AS remainingStock,
+                                                        COALESCE(SUM(s.stockOutPrice), 0) AS totalOutPrice
+                                                    FROM inventory_product_data p
+                                                    LEFT JOIN inventory_stockOut_data s ON s.productId = p.productId 
+                                                    AND s.branchId = '${branchId}'
+                                                    AND s.stockOutCategory = '${data.outCategory}'
+                                                    AND s.stockOutDate BETWEEN STR_TO_DATE('${data.startDate ? data.startDate : firstDay}','%b %d %Y') AND STR_TO_DATE('${data.endDate ? data.endDate : lastDay}','%b %d %Y')
+                                                    WHERE p.productCategoryId = '${data.productCategory}'
+                                                    GROUP BY p.productId, p.productName
+                                                    ORDER BY p.productName ASC`;
+                    pool.query(sql_queries_getdetails, (err, datas, fields) => {
+                        if (err) {
+                            console.error("An error occurd in SQL Queery", err);
+                            return res.status(500).send('Database Error');;
+                        } else {
+                            if (datas.length === 0) {
+                                return res.status(200).send('No Data Found');
+                            } else {
+                                processDatas(datas)
+                                    .then((data) => {
+                                        const jsonRaw = datas ? datas.map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
+                                        ) : []
+                                        return res.status(200).send(jsonRaw);
+                                    }).catch(error => {
+                                        console.error('Error in processing datas:', error);
+                                        return res.status(500).send('Internal Error');
+                                    });
+                            }
+                        }
+                    });
+                }
+            } else {
+                return res.status(401).send("BranchId Not Found");
+            }
+        } else {
+            return res.status(401).send("Please Login Firest.....!");
+        }
+
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Get Product Out Stock By Category
+
+const exportPdfOutStockByCategory = (req, res) => {
+    try {
+        let token;
+        token = req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded && decoded.id && decoded.id.branchId ? decoded.id.branchId : null;
+            if (branchId) {
+                var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+                var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+                var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+                const data = {
+                    startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                    endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
+                    searchProduct: req.query.searchProduct,
+                    productCategory: req.query.productCategory,
+                    outCategory: req.query.outCategory
+                }
+                if (!data.productCategory || !data.outCategory) {
+                    return res.status(404).send('Please Fill All The Fields....!')
+                } else {
+                    const sql_queries_getdetails = `SELECT
+                                                        p.productId,
+                                                        p.productName,
+                                                        p.minProductUnit,
+                                                        COALESCE(SUM(s.productQty), 0) AS remainingStock,
+                                                        COALESCE(SUM(s.stockOutPrice), 0) AS totalOutPrice
+                                                    FROM inventory_product_data p
+                                                    LEFT JOIN inventory_stockOut_data s ON s.productId = p.productId 
+                                                    AND s.branchId = '${branchId}'
+                                                    AND s.stockOutCategory = '${data.outCategory}'
+                                                    AND s.stockOutDate BETWEEN STR_TO_DATE('${data.startDate ? data.startDate : firstDay}','%b %d %Y') AND STR_TO_DATE('${data.endDate ? data.endDate : lastDay}','%b %d %Y')
+                                                    WHERE p.productCategoryId = '${data.productCategory}'
+                                                    GROUP BY p.productId, p.productName
+                                                    ORDER BY p.productName ASC;
+                                                    SELECT stockOutCategoryName FROM inventory_stockOutCategory_data
+                                                    WHERE stockOutCategoryId = '${data.outCategory}'`;
+                    pool.query(sql_queries_getdetails, (err, datas, fields) => {
+                        if (err) {
+                            console.error("An error occurd in SQL Queery", err);
+                            return res.status(500).send('Database Error');;
+                        } else {
+                            if (datas[0].length === 0) {
+                                return res.status(200).send('No Data Found');
+                            } else {
+                                processDatas(datas[0])
+                                    .then((data) => {
+                                        const rows = datas && datas[0] ? datas[0].map((element, index) => data[index] && data[index].convertedQuantity ? { ...element, remainingStock: data[index].convertedQuantity } : { ...element, remainingStock: element.remainingStock + ' ' + element.minProductUnit },
+                                        ) : []
+                                        console.log(rows);
+                                        const extractedData = rows.map(p => {
+                                            return {
+                                                "Product Name": p.productName,
+                                                "Total OUT": p.remainingStock,
+                                                "OUT Price": p.totalOutPrice
+                                            };
+                                        });
+                                        const abc = extractedData;
+                                        const cat = datas?.[1]?.[0]?.stockOutCategoryName;
+
+                                        tableHeading = req.query.startDate && req.query.endDate
+                                            ? `Product Out Data From ${req.query.startDate.slice(4, 15)} To ${req.query.endDate.slice(4, 15)}${cat ? ` [${cat}]` : ''}`
+                                            : `Product Data From ${firstDay} To ${lastDay}${cat ? ` [${cat}]` : ''}`;
+
+                                        createPDF(res, abc, tableHeading)
+                                            .then(() => {
+                                                console.log('PDF created successfully');
+                                                res.status(200);
+                                            })
+                                            .catch((err) => {
+                                                console.log(err);
+                                                res.status(500).send('Error creating PDF');
+                                            });
+                                    }).catch(error => {
+                                        console.error('Error in processing datas :', error);
+                                        return res.status(500).send('Internal Error');
+                                    });
+                            }
+                        }
+                    });
+                }
+            } else {
+                return res.status(401).send("BranchId Not Found");
+            }
+        } else {
+            return res.status(401).send("Please Login Firest.....!");
+        }
+
+    } catch (error) {
+        console.error('An error occurd', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
 module.exports = {
     addProduct,
     getProductListCounter,
@@ -3231,5 +3395,7 @@ module.exports = {
     getProductDetailsById,
     getCategoryWiseUsedByProduct,
     getUnitPreferenceById,
-    exportPdfForAllProductsData
+    exportPdfForAllProductsData,
+    getOutStockByCategory,
+    exportPdfOutStockByCategory
 }

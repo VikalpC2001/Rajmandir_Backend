@@ -116,26 +116,26 @@ const getmfProductStockInList = async (req, res) => {
                         const numRows = rows[0].numRows;
                         const numPages = Math.ceil(numRows / numPerPage);
                         const commanQuarry = `SELECT
-                                          mfStockInID AS mfStockInId,
-                                          user_details.userName AS enteredBy,
-                                          CONCAT(
-                                              user_details.userFirstName,
-                                              ' ',
-                                              user_details.userLastName
-                                          ) AS userName,
-                                          UPPER(factory_manufactureProduct_data.mfProductName) AS mfProductName,
-                                          CONCAT(mfStockInDisplayQty,' ',mfStockInDisplayUnit) AS Quantity,
-                                          ROUND(mfProductPrice,2) AS mfProductPrice,
-                                          totalPrice,
-                                          mfStockInComment,
-                                          mfProductQty,
-                                          remainingQty,
-                                          CONCAT(DATE_FORMAT(mfStockInDate, '%d-%m-%Y'),' ',DATE_FORMAT(mfStockInCreationDate, '%h:%i %p')) AS mfStockInDate
-                                      FROM
-                                          factory_mfProductStockIn_data
-                                      INNER JOIN user_details ON user_details.userId = factory_mfProductStockIn_data.userId
-                                      INNER JOIN factory_manufactureProduct_data ON factory_manufactureProduct_data.mfProductId = factory_mfProductStockIn_data.mfProductId
-                                      WHERE factory_mfProductStockIn_data.mfProductId IN(SELECT COALESCE(fmp.mfProductId, null) FROM factory_manufactureProduct_data AS fmp WHERE fmp.mfProductCategoryId = '${departmentId}')`;
+                                                  mfStockInID AS mfStockInId,
+                                                  user_details.userName AS enteredBy,
+                                                  CONCAT(
+                                                      user_details.userFirstName,
+                                                      ' ',
+                                                      user_details.userLastName
+                                                  ) AS userName,
+                                                  UPPER(factory_manufactureProduct_data.mfProductName) AS mfProductName,
+                                                  CONCAT(mfStockInDisplayQty,' ',mfStockInDisplayUnit) AS Quantity,
+                                                  ROUND(mfProductPrice,2) AS mfProductPrice,
+                                                  totalPrice,
+                                                  mfStockInComment,
+                                                  mfProductQty,
+                                                  remainingQty,
+                                                  CONCAT(DATE_FORMAT(mfStockInDate, '%d-%m-%Y'),' ',DATE_FORMAT(mfStockInCreationDate, '%h:%i %p')) AS mfStockInDate
+                                              FROM
+                                                  factory_mfProductStockIn_data
+                                              INNER JOIN user_details ON user_details.userId = factory_mfProductStockIn_data.userId
+                                              INNER JOIN factory_manufactureProduct_data ON factory_manufactureProduct_data.mfProductId = factory_mfProductStockIn_data.mfProductId
+                                              WHERE factory_mfProductStockIn_data.mfProductId IN(SELECT COALESCE(fmp.mfProductId, null) FROM factory_manufactureProduct_data AS fmp WHERE fmp.mfProductCategoryId = '${departmentId}')`;
                         if (req.query.mfProductId && req.query.startDate && req.query.endDate) {
                             sql_queries_getdetails = `${commanQuarry}
                                                   AND factory_mfProductStockIn_data.mfProductId = '${data.mfProductId}' AND factory_mfProductStockIn_data.mfStockInDate BETWEEN STR_TO_DATE('${data.startDate}','%b %d %Y') AND STR_TO_DATE('${data.endDate}','%b %d %Y')
@@ -157,9 +157,6 @@ const getmfProductStockInList = async (req, res) => {
                                 console.error("An error occurd in SQL Queery", err);
                                 return res.status(500).send('Database Error');;
                             } else {
-                                console.log(rows);
-                                console.log(numRows);
-                                console.log("Total Page :-", numPages);
                                 if (numRows === 0) {
                                     const rows = [{
                                         'msg': 'No Data Found'

@@ -197,7 +197,7 @@ const getLiveViewByCategoryId = (req, res) => {
                                                              FROM
                                                                  billing_billWiseItem_data AS bwid
                                                              INNER JOIN item_menuList_data AS imd ON imd.itemId = bwid.itemId
-                                                             LEFT JOIN item_unitWisePrice_data AS uwp ON uwp.itemId = bwid.itemId AND uwp.unit = bwid.unit
+                                                             LEFT JOIN item_unitWisePrice_data AS uwp ON uwp.itemId = bwid.itemId AND uwp.unit = bwid.unit AND uwp.menuCategoryId = '${process.env.BASE_MENU}'
                                                              WHERE bwid.billId = '${billId}'`;
                             let sql_query_getItemWiseAddons = `SELECT
                                                                iwad.iwaId AS iwaId,
@@ -209,7 +209,7 @@ const getLiveViewByCategoryId = (req, res) => {
                                                            FROM
                                                                billing_itemWiseAddon_data AS iwad
                                                            LEFT JOIN item_addons_data AS iad ON iad.addonsId = iwad.addOnsId
-                                                           WHERE iwad.iwbId IN(SELECT COALESCE(bwid.iwbId, NULL) FROM billing_billWiseItem_data AS bwid WHERE bwid.billId = '${billId}')`;
+                                                           WHERE iwad.iwbId IN (SELECT COALESCE(bwid.iwbId, NULL) FROM billing_billWiseItem_data AS bwid WHERE bwid.billId = '${billId}')`;
                             let sql_query_getCustomerInfo = `SELECT
                                                                  bwcd.bwcId AS bwcId,
                                                                  bwcd.customerId AS customerId,
@@ -476,7 +476,7 @@ const getBillDataByToken = (req, res) => {
                                                                          FROM
                                                                              billing_billWiseItem_data AS bwid
                                                                          INNER JOIN item_menuList_data AS imd ON imd.itemId = bwid.itemId
-                                                                         LEFT JOIN item_unitWisePrice_data AS uwp ON uwp.itemId = bwid.itemId AND uwp.unit = bwid.unit
+                                                                         LEFT JOIN item_unitWisePrice_data AS uwp ON uwp.itemId = bwid.itemId AND uwp.unit = bwid.unit AND uwp.menuCategoryId = '${process.env.BASE_MENU}'
                                                                          WHERE bwid.billId = '${billId}'`;
                                         let sql_query_getItemWiseAddons = `SELECT
                                                                                iwad.iwaId AS iwaId,
@@ -648,7 +648,7 @@ const getBillDataById = (req, res) => {
                                                              FROM
                                                                  billing_billWiseItem_data AS bwid
                                                              INNER JOIN item_menuList_data AS imd ON imd.itemId = bwid.itemId
-                                                             LEFT JOIN item_unitWisePrice_data AS uwp ON uwp.itemId = bwid.itemId AND uwp.unit = bwid.unit
+                                                             LEFT JOIN item_unitWisePrice_data AS uwp ON uwp.itemId = bwid.itemId AND uwp.unit = bwid.unit AND uwp.menuCategoryId = '${process.env.BASE_MENU}'
                                                              WHERE bwid.billId = '${billId}'`;
                             let sql_query_getItemWiseAddons = `SELECT
                                                                    iwad.iwaId AS iwaId,
@@ -763,14 +763,7 @@ const addPickUpBillData = (req, res) => {
 
                         const currentDate = getCurrentDate();
                         const billData = req.body;
-                        console.log('customerDetails', billData.customerDetails,
-                            'BID', branchId,
-                            'FID', billData.firmId,
-                            'subTotal', billData.subTotal,
-                            'settledAmount', billData.settledAmount,
-                            'billPayType', billData.billPayType,
-                            'billStatus', billData.billStatus,
-                            'itemsData', billData.itemsData)
+
                         if (!billData.customerDetails || !branchId || !billData.firmId || !billData.subTotal || !billData.settledAmount || !billData.billPayType || !billData.billStatus || !billData.itemsData) {
                             connection.rollback(() => {
                                 connection.release();
@@ -944,7 +937,6 @@ const addPickUpBillData = (req, res) => {
                                                                         billDate: new Date(currentDate).toLocaleDateString('en-GB'),
                                                                         billTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                                                                     }
-                                                                    console.log(sendJson);
                                                                     const tokenList = firm && firm[1].length ? firm[1] : null;
                                                                     const customerData = billData.customerDetails;
                                                                     if (customerData && customerData.customerId && customerData.addressId) {
@@ -1168,8 +1160,8 @@ const addPickUpBillData = (req, res) => {
                                                                                             }
                                                                                         })
                                                                                     } else if (customerData.address?.trim()) {
-                                                                                        let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, branchId, customerName, customerMobileNumber, birthDate, anniversaryDate)
-                                                                                                                         VALUES ('${newCustomerId}', '${branchId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
+                                                                                        let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, customerName, customerMobileNumber, birthDate, anniversaryDate)
+                                                                                                                         VALUES ('${newCustomerId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
                                                                                         connection.query(sql_querry_addNewCustomer, (err) => {
                                                                                             if (err) {
                                                                                                 console.error("Error inserting New Customer Data:", err);
@@ -1244,8 +1236,8 @@ const addPickUpBillData = (req, res) => {
                                                                                             }
                                                                                         });
                                                                                     } else if (customerData.mobileNo) {
-                                                                                        let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, branchId, customerName, customerMobileNumber, birthDate, anniversaryDate)
-                                                                                                                         VALUES ('${newCustomerId}', '${branchId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
+                                                                                        let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, customerName, customerMobileNumber, birthDate, anniversaryDate)
+                                                                                                                         VALUES ('${newCustomerId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
                                                                                         connection.query(sql_querry_addNewCustomer, (err) => {
                                                                                             if (err) {
                                                                                                 console.error("Error inserting New Customer Data:", err);
@@ -1382,6 +1374,7 @@ const addPickUpBillData = (req, res) => {
 }
 
 // Add Delivery Bill Data
+
 const addDeliveryBillData = (req, res) => {
     pool2.getConnection((err, connection) => {
         if (err) {
@@ -1799,8 +1792,8 @@ const addDeliveryBillData = (req, res) => {
                                                                                             }
                                                                                         })
                                                                                     } else if (customerData.address?.trim()) {
-                                                                                        let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, branchId, customerName, customerMobileNumber, birthDate, anniversaryDate)
-                                                                                                                         VALUES ('${newCustomerId}', '${branchId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
+                                                                                        let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, customerName, customerMobileNumber, birthDate, anniversaryDate)
+                                                                                                                         VALUES ('${newCustomerId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
                                                                                         connection.query(sql_querry_addNewCustomer, (err) => {
                                                                                             if (err) {
                                                                                                 console.error("Error inserting New Customer Data:", err);
@@ -1875,8 +1868,8 @@ const addDeliveryBillData = (req, res) => {
                                                                                             }
                                                                                         });
                                                                                     } else if (customerData.mobileNo) {
-                                                                                        let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, branchId, customerName, customerMobileNumber, birthDate, anniversaryDate)
-                                                                                                                         VALUES ('${newCustomerId}', '${branchId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
+                                                                                        let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, customerName, customerMobileNumber, birthDate, anniversaryDate)
+                                                                                                                         VALUES ('${newCustomerId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
                                                                                         connection.query(sql_querry_addNewCustomer, (err) => {
                                                                                             if (err) {
                                                                                                 console.error("Error inserting New Customer Data:", err);
@@ -2036,7 +2029,6 @@ const updatePickUpBillData = (req, res) => {
 
                         const currentDate = getCurrentDate();
                         const billData = req.body;
-                        console.log(billData.billStatus);
                         if (!billData.billId || !branchId || !billData.customerDetails || !billData.subTotal || !billData.settledAmount || !billData.billPayType || !billData.billStatus || !billData.itemsData) {
                             connection.rollback(() => {
                                 connection.release();
@@ -2053,7 +2045,6 @@ const updatePickUpBillData = (req, res) => {
                                         return res.status(500).send('Database Error');
                                     });
                                 } else {
-                                    console.log(chkExist);
                                     const isExist = chkExist && chkExist[0].length ? true : false;
                                     const staticBillNumber = chkExist && chkExist[0].length ? chkExist[0][0].billNumber : 0;
                                     const officialLastBillNo = chkExist && chkExist[1] ? chkExist[1][0].officialLastBillNo : 0;
@@ -2235,8 +2226,7 @@ const updatePickUpBillData = (req, res) => {
                                                                                     billDate: billDate,
                                                                                     billTime: billTime
                                                                                 }
-                                                                                console.log(!isExist && billData.isOfficial ? nextOfficialBillNo : staticBillNumber)
-                                                                                console.log(sendJson,)
+
                                                                                 const tokenList = firm && firm[1].length ? firm[1] : null;
                                                                                 const customerData = billData.customerDetails;
                                                                                 if (customerData && customerData.customerId && customerData.addressId) {
@@ -2466,8 +2456,8 @@ const updatePickUpBillData = (req, res) => {
                                                                                                         }
                                                                                                     })
                                                                                                 } else if (customerData.address?.trim()) {
-                                                                                                    let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, branchId, customerName, customerMobileNumber, birthDate, anniversaryDate)
-                                                                                                                                     VALUES ('${newCustomerId}', '${branchId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
+                                                                                                    let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, customerName, customerMobileNumber, birthDate, anniversaryDate)
+                                                                                                                                     VALUES ('${newCustomerId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
                                                                                                     connection.query(sql_querry_addNewCustomer, (err) => {
                                                                                                         if (err) {
                                                                                                             console.error("Error inserting New Customer Data:", err);
@@ -2544,8 +2534,8 @@ const updatePickUpBillData = (req, res) => {
                                                                                                         }
                                                                                                     });
                                                                                                 } else if (customerData.mobileNo) {
-                                                                                                    let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, branchId, customerName, customerMobileNumber, birthDate, anniversaryDate)
-                                                                                                                                     VALUES ('${newCustomerId}', '${branchId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
+                                                                                                    let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, customerName, customerMobileNumber, birthDate, anniversaryDate)
+                                                                                                                                     VALUES ('${newCustomerId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
                                                                                                     connection.query(sql_querry_addNewCustomer, (err) => {
                                                                                                         if (err) {
                                                                                                             console.error("Error inserting New Customer Data:", err);
@@ -2716,7 +2706,7 @@ const updateDeliveryBillData = (req, res) => {
 
                         const currentDate = getCurrentDate();
                         const billData = req.body;
-                        console.log(billData.billStatus);
+
                         if (!billData.billId || !branchId || !billData.customerDetails || !billData.subTotal || !billData.settledAmount || !billData.billPayType || !billData.billStatus || !billData.itemsData || !billData.customerDetails.mobileNo) {
                             connection.rollback(() => {
                                 connection.release();
@@ -2733,7 +2723,6 @@ const updateDeliveryBillData = (req, res) => {
                                         return res.status(500).send('Database Error');
                                     });
                                 } else {
-                                    console.log(chkExist);
                                     const isExist = chkExist && chkExist[0].length ? true : false;
                                     const staticBillNumber = chkExist && chkExist[0].length ? chkExist[0][0].billNumber : 0;
                                     const officialLastBillNo = chkExist && chkExist[1] ? chkExist[1][0].officialLastBillNo : 0;
@@ -2914,8 +2903,6 @@ const updateDeliveryBillData = (req, res) => {
                                                                                     billDate: billDate,
                                                                                     billTime: billTime
                                                                                 }
-                                                                                console.log(!isExist && billData.isOfficial ? nextOfficialBillNo : staticBillNumber)
-                                                                                console.log(sendJson,)
                                                                                 const tokenList = firm && firm[1].length ? firm[1] : null;
                                                                                 const customerData = billData.customerDetails;
                                                                                 if (customerData && customerData.customerId && customerData.addressId) {
@@ -3145,8 +3132,8 @@ const updateDeliveryBillData = (req, res) => {
                                                                                                         }
                                                                                                     })
                                                                                                 } else if (customerData.address?.trim()) {
-                                                                                                    let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, branchId, customerName, customerMobileNumber, birthDate, anniversaryDate)
-                                                                                                                                     VALUES ('${newCustomerId}', '${branchId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
+                                                                                                    let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, customerName, customerMobileNumber, birthDate, anniversaryDate)
+                                                                                                                                     VALUES ('${newCustomerId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
                                                                                                     connection.query(sql_querry_addNewCustomer, (err) => {
                                                                                                         if (err) {
                                                                                                             console.error("Error inserting New Customer Data:", err);
@@ -3223,8 +3210,8 @@ const updateDeliveryBillData = (req, res) => {
                                                                                                         }
                                                                                                     });
                                                                                                 } else if (customerData.mobileNo) {
-                                                                                                    let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, branchId, customerName, customerMobileNumber, birthDate, anniversaryDate)
-                                                                                                                                     VALUES ('${newCustomerId}', '${branchId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
+                                                                                                    let sql_querry_addNewCustomer = `INSERT INTO billing_customer_data(customerId, customerName, customerMobileNumber, birthDate, anniversaryDate)
+                                                                                                                                     VALUES ('${newCustomerId}', ${customerData.customerName ? `TRIM('${customerData.customerName}')` : null}, ${customerData.mobileNo ? `'${customerData.mobileNo}'` : null}, ${customerData.birthDate ? `STR_TO_DATE('${customerData.birthDate}','%b %d %Y')` : null}, ${customerData.aniversaryDate ? `STR_TO_DATE('${customerData.aniversaryDate}','%b %d %Y')` : null})`;
                                                                                                     connection.query(sql_querry_addNewCustomer, (err) => {
                                                                                                         if (err) {
                                                                                                             console.error("Error inserting New Customer Data:", err);

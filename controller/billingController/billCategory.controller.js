@@ -12,24 +12,24 @@ const getBillCategory = (req, res) => {
             const branchId = decoded.id.branchId;
 
             let sql_query_getCategory = `SELECT
-                                         bwc.bwcId AS bwcId,
-                                         bwc.branchId AS branchId,
-                                         bwc.categoryId AS categoryId,
-                                         bcd.categoryName AS categoryName,
-                                         bwc.menuId AS menuId,
-                                         imc.menuCategoryName AS menuCategoryName,
-                                         bwc.firmId AS firmId,
-                                         bfd.firmName AS firmName,
-                                         bwc.isOfficial AS isOfficial,
-                                         bwc.billFooterNote AS billFooterNote,
-                                         bwc.appriciateLine AS appriciateLine,
-                                         bwc.categoryStatus AS categoryStatus
-                                     FROM
-                                         billing_branchWiseCategory_data AS bwc
-                                     LEFT JOIN billing_category_data AS bcd ON bcd.categoryId = bwc.categoryId
-                                     LEFT JOIN item_menuCategory_data AS imc ON imc.menuCategoryId = bwc.menuId
-                                     LEFT JOIN billing_firm_data AS bfd ON bfd.firmId = bwc.firmId
-                                     WHERE bwc.branchId = '${branchId}' AND bwc.categoryId IN ('pickUp', 'delivery')`;
+                                             bwc.bwcId AS bwcId,
+                                             bwc.branchId AS branchId,
+                                             bwc.categoryId AS categoryId,
+                                             bcd.categoryName AS categoryName,
+                                             bwc.menuId AS menuId,
+                                             imc.menuCategoryName AS menuCategoryName,
+                                             bwc.firmId AS firmId,
+                                             bfd.firmName AS firmName,
+                                             bwc.isOfficial AS isOfficial,
+                                             bwc.billFooterNote AS billFooterNote,
+                                             bwc.appriciateLine AS appriciateLine,
+                                             bwc.categoryStatus AS categoryStatus
+                                         FROM
+                                             billing_branchWiseCategory_data AS bwc
+                                         LEFT JOIN billing_category_data AS bcd ON bcd.categoryId = bwc.categoryId
+                                         LEFT JOIN item_menuCategory_data AS imc ON imc.menuCategoryId = bwc.menuId
+                                         LEFT JOIN billing_firm_data AS bfd ON bfd.firmId = bwc.firmId
+                                         WHERE bwc.branchId = '${branchId}' AND bwc.categoryId IN ('pickUp', 'delivery')`;
             pool.query(sql_query_getCategory, (err, data) => {
                 if (err) {
                     console.error("An error occurred in SQL Query", err);
@@ -63,38 +63,42 @@ const updateBillCategoryData = (req, res) => {
         if (token) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const branchId = decoded.id.branchId;
+            const rights = decoded.id.rights;
 
-            const data = {
-                bwcId: req.body.bwcId ? req.body.bwcId : null,
-                categoryId: req.body.categoryId ? req.body.categoryId : null,
-                menuId: req.body.menuId ? req.body.menuId : null,
-                firmId: req.body.firmId ? req.body.firmId : null,
-                isOfficial: req.body.isOfficial ? req.body.isOfficial : false,
-                billFooterNote: req.body.billFooterNote ? req.body.billFooterNote : null,
-                appriciateLine: req.body.appriciateLine ? req.body.appriciateLine : null,
-                categoryStatus: req.body.categoryStatus ? req.body.categoryStatus : 0,
-            }
-            if (!data.categoryId || !data.menuId || !data.firmId) {
-                return res.status(404).send("Pleasr Provide All Fields...!")
+            if ([1, 2].includes(rights)) {
+                const data = {
+                    bwcId: req.body.bwcId ? req.body.bwcId : null,
+                    menuId: req.body.menuId ? req.body.menuId : null,
+                    firmId: req.body.firmId ? req.body.firmId : null,
+                    isOfficial: req.body.isOfficial ? req.body.isOfficial : false,
+                    billFooterNote: req.body.billFooterNote ? req.body.billFooterNote : null,
+                    appriciateLine: req.body.appriciateLine ? req.body.appriciateLine : null,
+                    categoryStatus: req.body.categoryStatus ? req.body.categoryStatus : 0,
+                }
+                if (!data.bwcId || !data.menuId || !data.firmId) {
+                    return res.status(404).send("Pleasr Provide All Fields...!")
+                } else {
+                    let sql_query_updateData = `UPDATE
+                                                    billing_branchWiseCategory_data
+                                                SET
+                                                    menuId = '${data.menuId}',
+                                                    firmId = '${data.firmId}',
+                                                    isOfficial = ${data.isOfficial},
+                                                    billFooterNote = '${data.billFooterNote}',
+                                                    appriciateLine = '${data.appriciateLine}',
+                                                    categoryStatus = ${data.categoryStatus}
+                                                WHERE bwcId = '${data.bwcId}' AND branchId = '${branchId}'`;
+                    pool.query(sql_query_updateData, (err, data) => {
+                        if (err) {
+                            console.error("An error occurred in SQL Queery", err);
+                            return res.status(500).send('Database Error');
+                        } else {
+                            return res.status(200).send('Record Updated Successfully');
+                        }
+                    })
+                }
             } else {
-                let sql_query_updateData = `UPDATE
-                                                billing_branchWiseCategory_data
-                                            SET
-                                                menuId = '${data.menuId}',
-                                                firmId = '${data.firmId}',
-                                                isOfficial = '${data.isOfficial}',
-                                                billFooterNote = '${data.billFooterNote}',
-                                                appriciateLine = '${data.appriciateLine}',
-                                                categoryStatus = '${data.categoryStatus}'
-                                            WHERE bwcId = '${data.bwcId}' AND branchId = '${branchId}'`;
-                pool.query(sql_query_updateData, (err, data) => {
-                    if (err) {
-                        console.error("An error occurred in SQL Queery", err);
-                        return res.status(500).send('Database Error');
-                    } else {
-                        return res.status(200).send('Record Updated Successfully');
-                    }
-                })
+                return res.status(400).send('You are Not Authorised');
             }
         } else {
             return res.status(400).send('Please Login First....!');
@@ -110,7 +114,8 @@ const updateBillCategoryData = (req, res) => {
 const ddlBillCategory = (req, res) => {
     try {
         let sql_query_getCategory = `SELECT
-                                         bcd.categoryName AS categoryName
+                                        bcd.categoryId AS categoryId,
+                                        bcd.categoryName AS categoryName
                                      FROM
                                          billing_category_data AS bcd`;
         pool.query(sql_query_getCategory, (err, data) => {

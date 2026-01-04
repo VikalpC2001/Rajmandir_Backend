@@ -87,11 +87,12 @@ const addMenuCategory = async (req, res) => {
                                             const sql_querry_addMenuItem = `INSERT INTO item_unitWisePrice_data(
                                                                                                     menuCategoryId,
                                                                                                     itemId,
+                                                                                                    preferredName,
                                                                                                     unit,
                                                                                                     price,
                                                                                                     status
                                                                                                 )
-                                                                SELECT '${menuCategoryId}', itemId, unit, price, status FROM item_unitWisePrice_data 
+                                                                SELECT '${menuCategoryId}', itemId, preferredName, unit, price, status FROM item_unitWisePrice_data 
                                                                 WHERE menuCategoryId = '${baseMenuId}'`;
                                             conn.query(sql_querry_addMenuItem, (err, data) => {
                                                 if (err) {
@@ -217,14 +218,20 @@ const updateMenuCategory = async (req, res) => {
 
 const copyPriceAndStatusByMenuId = (req, res) => {
     try {
-        const sourceId = req.query.sourceId ? req.query.sourceId : null;
-        const targetId = req.query.targetId ? req.query.targetId : null;
-        const itemSubCategory = req.query.itemSubCategory ? req.query.itemSubCategory : null;
-        if (targetId == baseMenuId) {
-            return res.status(400).send('You Can Not Target Base Menu');
-        } else if (sourceId && targetId) {
-            if (itemSubCategory) {
-                sql_query_copyData = `UPDATE item_unitWisePrice_data AS target
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const rights = decoded.id.rights;
+            if ([1, 2].includes(rights)) {
+                const sourceId = req.query.sourceId ? req.query.sourceId : null;
+                const targetId = req.query.targetId ? req.query.targetId : null;
+                const itemSubCategory = req.query.itemSubCategory ? req.query.itemSubCategory : null;
+                if (targetId == baseMenuId) {
+                    return res.status(400).send('You Can Not Target Base Menu');
+                } else if (sourceId && targetId) {
+                    if (itemSubCategory) {
+                        sql_query_copyData = `UPDATE item_unitWisePrice_data AS target
                                       JOIN item_unitWisePrice_data AS source ON target.itemId = source.itemId
                                       AND target.menuCategoryId = '${targetId}' 
                                       AND target.unit = source.unit
@@ -236,24 +243,30 @@ const copyPriceAndStatusByMenuId = (req, res) => {
                                           FROM item_menuList_data 
                                           WHERE itemSubCategory = '${itemSubCategory}'
                                       )`;
-            } else {
-                sql_query_copyData = `UPDATE item_unitWisePrice_data AS target
+                    } else {
+                        sql_query_copyData = `UPDATE item_unitWisePrice_data AS target
                                       JOIN item_unitWisePrice_data AS source ON target.itemId = source.itemId
                                       AND target.menuCategoryId = '${targetId}' 
                                       AND target.unit = source.unit
                                       AND source.menuCategoryId = '${sourceId}'
                                       SET target.price = source.price,
                                       target.status = source.status`;
-            }
-            pool.query(sql_query_copyData, (err, copy) => {
-                if (err) {
-                    console.error("An error occurred in SQL Queery", err);
-                    return res.status(500).send('Database Error');
+                    }
+                    pool.query(sql_query_copyData, (err, copy) => {
+                        if (err) {
+                            console.error("An error occurred in SQL Queery", err);
+                            return res.status(500).send('Database Error');
+                        }
+                        return res.status(200).send(`Menu Updated Successfully Like ${sourceId}`);
+                    })
+                } else {
+                    return res.status(404).send('Target Or Source Not Found');
                 }
-                return res.status(200).send(`Menu Updated Successfully Like ${sourceId}`);
-            })
+            } else {
+                return res.status(400).send('You are Not Authorised');
+            }
         } else {
-            return res.status(404).send('Target Or Source Not Found');
+            return res.status(404).send('Please Login First...!');
         }
     } catch (error) {
         console.error('An error occurred', error);

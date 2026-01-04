@@ -15,6 +15,7 @@ router.get('/ddlBillCategory', protect, categoryController.ddlBillCategory);
 const commentController = require("../../controller/billingController/comment.controller.js");
 
 router.get('/getComment', protect, commentController.getComment);
+router.get('/getCommentData', protect, commentController.getCommentData);
 router.post('/addComment', protect, commentController.addComment);
 router.delete('/removeComment', protect, commentController.removeComment);
 router.post('/updateComment', protect, commentController.updateComment);
@@ -26,20 +27,29 @@ const customerController = require("../../controller/billingController/customer.
 router.get('/searchCustomerData', protect, customerController.searchCustomerData);
 router.get('/getCustomerList', protect, customerController.getCustomerList);
 router.get('/getCustomerDetailsById', protect, customerController.getCustomerDetailsById);
-router.post('/addMultipleCustomerData', customerController.addMultipleCustomerData);
-router.post('/addCustomerData', customerController.addCustomerData);
-router.post('/updateCustomerData', customerController.updateCustomerData);
+router.post('/addMultipleCustomerData', protect, customerController.addMultipleCustomerData);
+router.post('/addCustomerData', protect, customerController.addCustomerData);
+router.delete('/removeCustomeData', protect, customerController.removeCustomeData);
+router.post('/updateCustomerData', protect, customerController.updateCustomerData);
+router.get('/getStaticsByCustomer', protect, customerController.getStaticsByCustomer);
+router.get('/getBillDataBycustomerId', protect, customerController.getBillDataBycustomerId);
 
 // Firm Routs
 
 const firmController = require("../../controller/billingController/firm.controller.js");
 
 router.get('/getFirmData', protect, firmController.getFirmData);
+router.get('/getFirmDataById', protect, firmController.getFirmDataById);
 router.post('/addFirmData', protect, firmController.addFirmData);
 router.delete('/removeFirmData', protect, firmController.removeFirmData);
 router.post('/updateFirmData', protect, firmController.updateFirmData);
 router.get('/ddlFirmData', protect, firmController.ddlFirmData);
-router.get('/getTaxReportByFirmId', firmController.getTaxReportByFirmId);
+router.get('/getTaxReportByFirmId', protect, firmController.getTaxReportByFirmId);
+router.get('/getBillDataByFirmId', protect, firmController.getBillDataByFirmId);
+router.get('/getCancelBillDataByFirmId', protect, firmController.getCancelBillDataByFirmId);
+router.get('/getComplimentaryBillDataByFirmId', protect, firmController.getComplimentaryBillDataByFirmId);
+router.get('/getMonthWiseBillDataByFirmId', protect, firmController.getMonthWiseBillDataByFirmId);
+router.get('/getStaticsDataByFirmId', protect, firmController.getStaticsDataByFirmId);
 
 // Billing Routs
 
@@ -86,11 +96,14 @@ router.post('/updatePrinterData', protect, printerController.updatePrinterData);
 
 const upiConntroller = require("../../controller/billingController/upi.controller.js");
 
-router.get('/getCustomerAccountList', protect, upiConntroller.getUPIList);
-router.post('/addCustomerAccount', protect, upiConntroller.addUPI);
-router.delete('/removeCustomerAccount', protect, upiConntroller.removeUPI);
-router.post('/updateCustomerAccount', protect, upiConntroller.updateUPI);
+router.get('/getUPIList', protect, upiConntroller.getUPIList);
+router.post('/addUPI', protect, upiConntroller.addUPI);
+router.delete('/removeUPI', protect, upiConntroller.removeUPI);
+router.post('/updateUPI', protect, upiConntroller.updateUPI);
 router.get('/ddlUPI', protect, upiConntroller.ddlUPI);
+router.get('/setDefaultUPI', protect, upiConntroller.setDefaultUPI);
+router.get('/getUPITransactionById', protect, upiConntroller.getUPITransactionById);
+router.get('/getUPIStaticsById', protect, upiConntroller.getUPIStaticsById);
 
 // settle
 

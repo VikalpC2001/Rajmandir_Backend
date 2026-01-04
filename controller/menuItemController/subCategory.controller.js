@@ -7,83 +7,92 @@ const { periodDatas } = require('./menuFunction.controller')
 
 const getSubCategoryList = (req, res) => {
     try {
-        const page = req.query.page;
-        const numPerPage = req.query.numPerPage;
-        const skip = (page - 1) * numPerPage;
-        const limit = skip + ',' + numPerPage;
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded.id.branchId;
+            const page = req.query.page;
+            const numPerPage = req.query.numPerPage;
+            const skip = (page - 1) * numPerPage;
+            const limit = skip + ',' + numPerPage;
 
-        var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
-        var firstDay = new Date(y, m, 1).toString().slice(4, 15);
-        var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
-        const startDate = (req.query.startDate ? req.query.startDate : '').slice(4, 15);
-        const endDate = (req.query.endDate ? req.query.endDate : '').slice(4, 15);
+            var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+            var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+            var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+            const startDate = (req.query.startDate ? req.query.startDate : '').slice(4, 15);
+            const endDate = (req.query.endDate ? req.query.endDate : '').slice(4, 15);
 
-        sql_querry_getCountDetails = `SELECT count(*) as numRows FROM item_subCategory_data`;
-        pool.query(sql_querry_getCountDetails, (err, rows, fields) => {
-            if (err) {
-                console.error("An error occurred in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            } else {
-                const numRows = rows[0].numRows;
-                const numPages = Math.ceil(numRows / numPerPage);
-                const sql_query_getDetails = `WITH FilteredBillingData AS (
+            sql_querry_getCountDetails = `SELECT count(*) as numRows FROM item_subCategory_data`;
+            pool.query(sql_querry_getCountDetails, (err, rows, fields) => {
+                if (err) {
+                    console.error("An error occurred in SQL Queery", err);
+                    return res.status(500).send('Database Error');
+                } else {
+                    const numRows = rows[0].numRows;
+                    const numPages = Math.ceil(numRows / numPerPage);
+                    const sql_query_getDetails = `WITH FilteredBillingData AS (
+                                                    SELECT
+                                                        itemId,
+                                                        SUM(price) AS totalRs
+                                                    FROM
+                                                        billing_billWiseItem_data
+                                                    WHERE
+                                                        billDate BETWEEN STR_TO_DATE('${startDate ? startDate : firstDay}', '%b %d %Y') AND STR_TO_DATE('${endDate ? endDate : lastDay}', '%b %d %Y')
+                                                        AND billPayType NOT IN ('Cancel', 'complimentary')
+                                                        AND billStatus != 'Cancel'
+                                                        AND branchId = '${branchId}'
+                                                    GROUP BY itemId
+                                                )
                                                 SELECT
-                                                    itemId,
-                                                    SUM(price) AS totalRs
+                                                    iscd.subCategoryId,
+                                                    iscd.subCategoryName,
+                                                    iscd.displayRank,
+                                                    COALESCE(SUM(fbd.totalRs), 0) AS totalRs
                                                 FROM
-                                                    billing_billWiseItem_data
-                                                WHERE
-                                                    billDate BETWEEN STR_TO_DATE('${startDate ? startDate : firstDay}', '%b %d %Y') AND STR_TO_DATE('${endDate ? endDate : lastDay}', '%b %d %Y')
-                                                    AND billPayType NOT IN ('Cancel', 'complimentary')
-                                                    AND billStatus != 'Cancel'
-                                                GROUP BY itemId
-                                            )
-                                            SELECT
-                                                iscd.subCategoryId,
-                                                iscd.subCategoryName,
-                                                iscd.displayRank,
-                                                COALESCE(SUM(fbd.totalRs), 0) AS totalRs
-                                            FROM
-                                                item_subCategory_data AS iscd
-                                            LEFT JOIN item_menuList_data AS imld ON imld.itemSubCategory = iscd.subCategoryId
-                                            LEFT JOIN FilteredBillingData AS fbd ON fbd.itemId = imld.itemId
-                                            GROUP BY
-                                                iscd.subCategoryId,
-                                                iscd.subCategoryName
-                                            ORDER BY
-                                                iscd.subCategoryName ASC
-                                                LIMIT ${limit}`;
-                pool.query(sql_query_getDetails, (err, rows, fields) => {
-                    if (err) {
-                        console.error("An error occurred in SQL Queery", err);
-                        return res.status(500).send('Database Error');;
-                    } else {
-                        if (numRows === 0) {
-                            const rows = [{
-                                'msg': 'No Data Found'
-                            }]
-                            return res.status(200).send({ rows, numRows });
+                                                    item_subCategory_data AS iscd
+                                                LEFT JOIN item_menuList_data AS imld ON imld.itemSubCategory = iscd.subCategoryId
+                                                LEFT JOIN FilteredBillingData AS fbd ON fbd.itemId = imld.itemId
+                                                GROUP BY
+                                                    iscd.subCategoryId,
+                                                    iscd.subCategoryName
+                                                ORDER BY
+                                                    iscd.subCategoryName ASC
+                                                    LIMIT ${limit}`;
+                    pool.query(sql_query_getDetails, (err, rows, fields) => {
+                        if (err) {
+                            console.error("An error occurred in SQL Queery", err);
+                            return res.status(500).send('Database Error');;
                         } else {
-                            const datas = Object.values(JSON.parse(JSON.stringify(rows)));
-                            if (datas.length) {
-                                periodDatas(datas)
-                                    .then((data) => {
-                                        const rows = datas.map((item, index) => (
-                                            { ...item, periods: data[index].periods }
-                                        ))
-                                        return res.status(200).send({ rows, numRows });
-                                    }).catch(error => {
-                                        console.error('Error in processing datas :', error);
-                                        return res.status(500).send('Internal Error');
-                                    })
+                            if (numRows === 0) {
+                                const rows = [{
+                                    'msg': 'No Data Found'
+                                }]
+                                return res.status(200).send({ rows, numRows });
                             } else {
-                                return res.status(400).send('No Data Found');
+                                const datas = Object.values(JSON.parse(JSON.stringify(rows)));
+                                if (datas.length) {
+                                    periodDatas(datas)
+                                        .then((data) => {
+                                            const rows = datas.map((item, index) => (
+                                                { ...item, periods: data[index].periods }
+                                            ))
+                                            return res.status(200).send({ rows, numRows });
+                                        }).catch(error => {
+                                            console.error('Error in processing datas :', error);
+                                            return res.status(500).send('Internal Error');
+                                        })
+                                } else {
+                                    return res.status(400).send('No Data Found');
+                                }
                             }
                         }
-                    }
-                })
-            }
-        })
+                    })
+                }
+            })
+        } else {
+            return res.status(400).send('Please Login First....!');
+        }
     } catch (error) {
         console.error('An error occurred', error);
         res.status(500).json('Internal Server Error');
@@ -139,6 +148,7 @@ const ddlSubCategory = (req, res) => {
             sql_querry_getddlCategory = `SELECT 
                                             subCategoryId, 
                                             subCategoryName,
+                                            displayRank,
                                             (
                                                 SELECT COUNT(*)
                                                 FROM item_menuList_data imd
@@ -420,6 +430,34 @@ const updateSubCategoryPeriod = (req, res) => {
     })
 }
 
+// Update Display Rank for Sub Category Data
+
+const updateDisplayRankForSubCategory = (req, res) => {
+    try {
+        const jsonData = req.body ? req.body : [];
+        if (jsonData && jsonData.length) {
+            const sql_query_updateRank = `UPDATE item_subCategory_data
+                                          SET displayRank = CASE subCategoryId
+                                          ${jsonData.map(item => `WHEN '${item.subCategoryId}' THEN ${item.displayRank}`).join('\n')}
+                                          END
+                                          WHERE subCategoryId IN (${jsonData.map(item => `'${item.subCategoryId}'`).join(', ')})`;
+            pool.query(sql_query_updateRank, (err, data) => {
+                if (err) {
+                    console.error("An error occurred in SQL Queery", err);
+                    return res.status(500).send('Database Error');
+                } else {
+                    return res.status(200).send("Success");
+                }
+            })
+        } else {
+            return res.status(400).send('Please Fill All The Fields...!')
+        }
+    } catch (error) {
+        console.error('An error occurred', error);
+        res.status(500).send('Internal Server Error');
+    }
+}
+
 module.exports = {
     getSubCategoryList,
     ddlSubCategory,
@@ -428,5 +466,6 @@ module.exports = {
     updateSubCategoryData,
     addSubCategoryPeriod,
     updateSubCategoryPeriod,
-    getSubCategoryListForMobile
+    getSubCategoryListForMobile,
+    updateDisplayRankForSubCategory
 }

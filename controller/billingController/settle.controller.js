@@ -1,6 +1,5 @@
 const pool2 = require("../../databasePool");
 
-
 function queryAsync(conn, sql, params) {
     return new Promise((resolve, reject) => {
         conn.query(sql, params, (err, results) => {

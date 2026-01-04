@@ -1,4 +1,3 @@
-const { popGraphicsState } = require('pdf-lib');
 const pool = require('../../database');
 const jwt = require('jsonwebtoken');
 const { processDatas } = require("../inventoryController/conversation.controller");
@@ -94,7 +93,15 @@ const productWiseSupplierDDL = (req, res) => {
 
 const ddlStockInCategory = (req, res) => {
     try {
-        const sql_querry_getddlCategory = `SELECT stockInCategoryId, UPPER(stockInCategoryName) AS stockInCategoryName FROM inventory_stockInCategory_data ORDER BY stockInCategoryName`;
+        const sql_querry_getddlCategory = `SELECT
+                                               c.stockInCategoryId AS stockInCategoryId,
+                                               UPPER(c.stockInCategoryName) AS categoryName,
+                                               COUNT(p.productId) AS numOfProduct
+                                           FROM
+                                               inventory_stockInCategory_data c
+                                           LEFT JOIN inventory_product_data p ON p.productCategoryId = c.stockInCategoryId
+                                           GROUP BY c.stockInCategoryId, c.stockInCategoryName
+                                           ORDER BY c.stockInCategoryName`;
         pool.query(sql_querry_getddlCategory, (err, data) => {
             if (err) {
                 console.error("An error occurd in SQL Queery", err);
@@ -112,7 +119,12 @@ const ddlStockInCategory = (req, res) => {
 
 const ddlStockOutCategory = (req, res) => {
     try {
-        const sql_querry_getddlCategory = `SELECT stockOutCategoryId, UPPER(stockOutCategoryName) AS stockOutCategoryName FROM inventory_stockOutCategory_data ORDER BY stockOutCategoryName`;
+        const sql_querry_getddlCategory = `SELECT
+                                                stockOutCategoryId,
+                                                UPPER(stockOutCategoryName) AS stockOutCategoryName
+                                           FROM 
+                                                inventory_stockOutCategory_data
+                                           ORDER BY FIELD(stockOutCategoryName, 'REGULAR') DESC, stockOutCategoryName ASC`;
         pool.query(sql_querry_getddlCategory, (err, data) => {
             if (err) {
                 console.error("An error occurd in SQL Queery", err);

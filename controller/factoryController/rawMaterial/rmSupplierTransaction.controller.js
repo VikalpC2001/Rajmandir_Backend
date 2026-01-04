@@ -155,8 +155,6 @@ const getRmDebitTransactionList = async (req, res) => {
             var firstDay = new Date(y, m, 1).toString().slice(4, 15);
             var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
 
-            console.log("1111>>>>", firstDay);
-            console.log("1111>>>>", lastDay);
             const data = {
                 startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
                 endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15),
@@ -211,9 +209,6 @@ const getRmDebitTransactionList = async (req, res) => {
                             console.error("An error occurd in SQL Queery", err);
                             return res.status(500).send('Database Error');;
                         } else {
-                            console.log(rows);
-                            console.log(numRows);
-                            console.log("Total Page :-", numPages);
                             if (numRows === 0) {
                                 const rows = [{
                                     'msg': 'No Data Found'
@@ -289,9 +284,6 @@ const getRmCashTransactionList = async (req, res) => {
                             console.error("An error occurd in SQL Queery", err);
                             return res.status(500).send('Database Error');;
                         } else {
-                            console.log(rows);
-                            console.log(numRows);
-                            console.log("Total Page :-", numPages);
                             if (numRows === 0) {
                                 const rows = [{
                                     'msg': 'No Data Found'

@@ -90,47 +90,72 @@ async function createPDF(res, datas) {
 
 const getItemData = (req, res) => {
     try {
-        const menuId = req.query.menuId ? req.query.menuId : 'base_2001';
-        const subCategoryId = req.query.subCategoryId ? req.query.subCategoryId : '';
-        const sql_query_staticQuery = `SELECT itemId, itemName, itemGujaratiName, itemCode, itemShortKey, itemSubCategory, spicyLevel, isJain, isPureJain, itemDescription, isFavourite FROM item_menuList_data`;
-        if (!menuId) {
-            return res.status(404).send('menuId Not Found');
-        } else if (req.query.subCategoryId) {
-            sql_querry_getItem = `${sql_query_staticQuery}
-                                  WHERE itemSubCategory = '${subCategoryId}'
-                                  ORDER BY itemCode ASC`;
-        } else {
-            sql_querry_getItem = `${sql_query_staticQuery}
-                                  ORDER BY itemCode ASC`;
-        }
-        pool.query(sql_querry_getItem, (err, rows) => {
-            if (err) {
-                console.error("An error occurred in SQL Queery", err);
-                return res.status(500).send('Database Error');
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded.id.branchId;
+
+            const menuId = req.query.menuId ? req.query.menuId : 'base_2001';
+            const subCategoryId = req.query.subCategoryId ? req.query.subCategoryId : '';
+            const sql_query_staticQuery = `SELECT
+                                                i.itemId,
+                                                i.itemName,
+                                                i.itemGujaratiName,
+                                                i.itemCode,
+                                                i.itemShortKey,
+                                                i.itemSubCategory,
+                                                i.spicyLevel,
+                                                i.isJain,
+                                                i.isPureJain,
+                                                i.itemDescription,
+                                                EXISTS(
+                                                    SELECT 1 FROM item_branchWiseFavourite_data f
+                                                    WHERE f.itemId = i.itemId AND f.branchId = '${branchId}'
+                                                ) AS isFavourite                                            
+                                            FROM 
+                                            item_menuList_data i`;
+            if (!menuId) {
+                return res.status(404).send('menuId Not Found');
+            } else if (req.query.subCategoryId) {
+                sql_querry_getItem = `${sql_query_staticQuery}
+                                      WHERE i.itemSubCategory = '${subCategoryId}'
+                                      ORDER BY i.itemCode ASC`;
             } else {
-                const datas = Object.values(JSON.parse(JSON.stringify(rows)));
-                if (datas.length) {
-                    varientDatas(datas, menuId)
-                        .then((data) => {
-                            const combinedData = datas.map((item, index) => (
-                                {
-                                    ...item,
-                                    variantsList: data[index].varients,
-                                    allVariantsList: data[index].allVariantsList,
-                                    periods: data[index].periods,
-                                    status: data[index].status
-                                }
-                            ))
-                            return res.status(200).send(combinedData);
-                        }).catch(error => {
-                            console.error('Error in processing datas :', error);
-                            return res.status(500).send('Internal Error');
-                        });
-                } else {
-                    return res.status(400).send('No Data Found');
-                }
+                sql_querry_getItem = `${sql_query_staticQuery}
+                                      ORDER BY i.itemCode ASC`;
             }
-        })
+            pool.query(sql_querry_getItem, (err, rows) => {
+                if (err) {
+                    console.error("An error occurred in SQL Queery", err);
+                    return res.status(500).send('Database Error');
+                } else {
+                    const datas = Object.values(JSON.parse(JSON.stringify(rows)));
+                    if (datas.length) {
+                        varientDatas(datas, menuId)
+                            .then((data) => {
+                                const combinedData = datas.map((item, index) => (
+                                    {
+                                        ...item,
+                                        variantsList: data[index].varients,
+                                        allVariantsList: data[index].allVariantsList,
+                                        periods: data[index].periods,
+                                        status: data[index].status
+                                    }
+                                ))
+                                return res.status(200).send(combinedData);
+                            }).catch(error => {
+                                console.error('Error in processing datas :', error);
+                                return res.status(500).send('Internal Error');
+                            });
+                    } else {
+                        return res.status(400).send('No Data Found');
+                    }
+                }
+            })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurred', error);
         res.status(500).json('Internal Server Error');
@@ -520,81 +545,90 @@ const updateItemStatus = (req, res) => {
 
 const getItemSalesReport = (req, res) => {
     try {
-        var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
-        var firstDay = new Date(y, m, 1).toString().slice(4, 15);
-        var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded.id.branchId;
+            var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+            var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+            var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
 
-        const data = {
-            subCategoryId: req.query.subCategoryId ? req.query.subCategoryId : null,
-            billType: req.query.billType ? req.query.billType : '',
-            startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
-            endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15)
-        }
-        let sql_querry_getDetails = `SELECT
-                                         uwi.itemId,
-                                         CONCAT(item.itemName,' (',uwi.unit,')') AS itemName,
-                                         item.itemSubCategory,
-                                         iscd.subCategoryName,
-                                         uwi.unit,
-                                         SUM(CASE WHEN bbi.billStatus != 'cancel' AND bbi.billPayType != 'complimentary' THEN bbi.qty ELSE 0 END) AS soldQty,
-                                         SUM(CASE WHEN bbi.billStatus != 'cancel' AND bbi.billPayType != 'complimentary' THEN bbi.price ELSE 0 END) AS soldRevenue,
-                                         SUM(CASE WHEN bbi.billStatus != 'cancel' AND bbi.billPayType = 'complimentary' THEN bbi.qty ELSE 0 END) AS complimentaryQty,
-                                         SUM(CASE WHEN bbi.billStatus != 'cancel' AND bbi.billPayType = 'complimentary' THEN bbi.price ELSE 0 END) AS complimentaryRevenue,
-                                         SUM(CASE WHEN bbi.billStatus = 'cancel' THEN bbi.qty ELSE 0 END) AS cancelQty,
-                                         SUM(CASE WHEN bbi.billStatus = 'cancel' THEN bbi.price ELSE 0 END) AS cancelRevenue
-                                     FROM
-                                         item_unitWisePrice_data AS uwi
-                                     INNER JOIN item_menuList_data AS item ON item.itemId = uwi.itemId
-                                     INNER JOIN item_subCategory_data AS iscd ON iscd.subCategoryId = item.itemSubCategory
-                                     LEFT JOIN billing_billWiseItem_data AS bbi ON uwi.itemId = bbi.itemId 
-                                     AND uwi.unit = bbi.unit 
-                                     AND bbi.billDate BETWEEN STR_TO_DATE('${data.startDate ? data.startDate : firstDay}', '%b %d %Y') AND STR_TO_DATE('${data.endDate ? data.endDate : lastDay}', '%b %d %Y')
-                                     AND bbi.billType LIKE '%` + data.billType + `%'
-                                     WHERE uwi.menuCategoryId = '${process.env.BASE_MENU}' ${data.subCategoryId ? `AND iscd.subCategoryId = '${data.subCategoryId}'` : ''}
-                                     GROUP BY
-                                         uwi.itemId,
-                                         uwi.unit,
-                                         item.itemName,
-                                         item.itemSubCategory
-                                     ORDER BY
-                                         uwi.itemId,
-                                         CASE
-                                            WHEN uwi.unit = 'NO' THEN 1
-                                            WHEN uwi.unit = 'HP' THEN 2
-                                            WHEN uwi.unit = 'KG' THEN 3
-                                            ELSE 4
-                                          END`;
-        pool.query(sql_querry_getDetails, (err, data) => {
-            if (err) {
-                console.error("An error occurred in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            } else if (!data.length) {
-                return res.status(404).send('No Data Found');
-            } else {
-                const result = data.reduce((acc, item) => {
-                    const key = item.subCategoryName;
-                    if (!acc[key]) {
-                        acc[key] = {
-                            items: [],
-                            totalQty: 0, totalRevenue: 0,
-                            totalComplimentaryQty: 0, totalComplimentaryRevenue: 0,
-                            totalCancelQty: 0, totalCancelRevenue: 0
-                        };
-                    }
-                    acc[key].items.push(item);
-                    if (item.soldRevenue !== null) {
-                        acc[key].totalQty += item.soldQty;
-                        acc[key].totalRevenue += item.soldRevenue;
-                        acc[key].totalComplimentaryQty += item.complimentaryQty;
-                        acc[key].totalComplimentaryRevenue += item.complimentaryRevenue;
-                        acc[key].totalCancelQty += item.cancelQty;
-                        acc[key].totalCancelRevenue += item.cancelRevenue;
-                    }
-                    return acc;
-                }, {});
-                return res.status(200).send(result[data[0].subCategoryName]);
+            const data = {
+                subCategoryId: req.query.subCategoryId ? req.query.subCategoryId : null,
+                billType: req.query.billType ? req.query.billType : '',
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15)
             }
-        })
+            let sql_querry_getDetails = `SELECT
+                                             uwi.itemId,
+                                             CONCAT(item.itemName,' (',uwi.unit,')') AS itemName,
+                                             item.itemSubCategory,
+                                             iscd.subCategoryName,
+                                             uwi.unit,
+                                             SUM(CASE WHEN bbi.billStatus != 'cancel' AND bbi.billPayType != 'complimentary' THEN bbi.qty ELSE 0 END) AS soldQty,
+                                             SUM(CASE WHEN bbi.billStatus != 'cancel' AND bbi.billPayType != 'complimentary' THEN bbi.price ELSE 0 END) AS soldRevenue,
+                                             SUM(CASE WHEN bbi.billStatus != 'cancel' AND bbi.billPayType = 'complimentary' THEN bbi.qty ELSE 0 END) AS complimentaryQty,
+                                             SUM(CASE WHEN bbi.billStatus != 'cancel' AND bbi.billPayType = 'complimentary' THEN bbi.price ELSE 0 END) AS complimentaryRevenue,
+                                             SUM(CASE WHEN bbi.billStatus = 'cancel' THEN bbi.qty ELSE 0 END) AS cancelQty,
+                                             SUM(CASE WHEN bbi.billStatus = 'cancel' THEN bbi.price ELSE 0 END) AS cancelRevenue
+                                         FROM
+                                             item_unitWisePrice_data AS uwi
+                                         INNER JOIN item_menuList_data AS item ON item.itemId = uwi.itemId
+                                         INNER JOIN item_subCategory_data AS iscd ON iscd.subCategoryId = item.itemSubCategory
+                                         LEFT JOIN billing_billWiseItem_data AS bbi ON uwi.itemId = bbi.itemId 
+                                         AND uwi.unit = bbi.unit
+                                         AND bbi.branchId = '${branchId}'
+                                         AND bbi.billDate BETWEEN STR_TO_DATE('${data.startDate ? data.startDate : firstDay}', '%b %d %Y') AND STR_TO_DATE('${data.endDate ? data.endDate : lastDay}', '%b %d %Y')
+                                         AND bbi.billType LIKE '%` + data.billType + `%'
+                                         WHERE uwi.menuCategoryId = '${process.env.BASE_MENU}' ${data.subCategoryId ? `AND iscd.subCategoryId = '${data.subCategoryId}'` : ''}
+                                         GROUP BY
+                                             uwi.itemId,
+                                             uwi.unit,
+                                             item.itemName,
+                                             item.itemSubCategory
+                                         ORDER BY
+                                             uwi.itemId,
+                                             CASE
+                                                WHEN uwi.unit = 'NO' THEN 1
+                                                WHEN uwi.unit = 'HP' THEN 2
+                                                WHEN uwi.unit = 'KG' THEN 3
+                                                ELSE 4
+                                              END`;
+            pool.query(sql_querry_getDetails, (err, data) => {
+                if (err) {
+                    console.error("An error occurred in SQL Queery", err);
+                    return res.status(500).send('Database Error');
+                } else if (!data.length) {
+                    return res.status(404).send('No Data Found');
+                } else {
+                    const result = data.reduce((acc, item) => {
+                        const key = item.subCategoryName;
+                        if (!acc[key]) {
+                            acc[key] = {
+                                items: [],
+                                totalQty: 0, totalRevenue: 0,
+                                totalComplimentaryQty: 0, totalComplimentaryRevenue: 0,
+                                totalCancelQty: 0, totalCancelRevenue: 0
+                            };
+                        }
+                        acc[key].items.push(item);
+                        if (item.soldRevenue !== null) {
+                            acc[key].totalQty += item.soldQty;
+                            acc[key].totalRevenue += item.soldRevenue;
+                            acc[key].totalComplimentaryQty += item.complimentaryQty;
+                            acc[key].totalComplimentaryRevenue += item.complimentaryRevenue;
+                            acc[key].totalCancelQty += item.cancelQty;
+                            acc[key].totalCancelRevenue += item.cancelRevenue;
+                        }
+                        return acc;
+                    }, {});
+                    return res.status(200).send(result[data[0].subCategoryName]);
+                }
+            })
+        } else {
+            return res.status(400).send('Please Login First....!');
+        }
     } catch (error) {
         console.error('An error occurred', error);
         res.status(500).send('Internal Server Error');
@@ -605,17 +639,22 @@ const getItemSalesReport = (req, res) => {
 
 const exportPdfForItemSalesReport = (req, res) => {
     try {
-        var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
-        var firstDay = new Date(y, m, 1).toString().slice(4, 15);
-        var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
+        let token;
+        token = req.headers ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded.id.branchId;
+            var date = new Date(), y = date.getFullYear(), m = (date.getMonth());
+            var firstDay = new Date(y, m, 1).toString().slice(4, 15);
+            var lastDay = new Date(y, m + 1, 0).toString().slice(4, 15);
 
-        const data = {
-            subCategoryId: req.query.subCategoryId ? req.query.subCategoryId : null,
-            billType: req.query.billType ? req.query.billType : '',
-            startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
-            endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15)
-        }
-        let sql_querry_getDetails = `SELECT
+            const data = {
+                subCategoryId: req.query.subCategoryId ? req.query.subCategoryId : null,
+                billType: req.query.billType ? req.query.billType : '',
+                startDate: (req.query.startDate ? req.query.startDate : '').slice(4, 15),
+                endDate: (req.query.endDate ? req.query.endDate : '').slice(4, 15)
+            }
+            let sql_querry_getDetails = `SELECT
                                          uwi.itemId,
                                          CONCAT(item.itemName,' (',uwi.unit,')') AS itemName,
                                          item.itemSubCategory,
@@ -633,6 +672,7 @@ const exportPdfForItemSalesReport = (req, res) => {
                                      INNER JOIN item_subCategory_data AS iscd ON iscd.subCategoryId = item.itemSubCategory
                                      LEFT JOIN billing_billWiseItem_data AS bbi ON uwi.itemId = bbi.itemId 
                                      AND uwi.unit = bbi.unit 
+                                     AND bbi.branchId = '${branchId}'
                                      AND bbi.billDate BETWEEN STR_TO_DATE('${data.startDate ? data.startDate : firstDay}', '%b %d %Y') AND STR_TO_DATE('${data.endDate ? data.endDate : lastDay}', '%b %d %Y')
                                      AND bbi.billType LIKE '%` + data.billType + `%'
                                      WHERE uwi.menuCategoryId = '${process.env.BASE_MENU}' ${data.subCategoryId ? `AND iscd.subCategoryId = '${data.subCategoryId}'` : ''}
@@ -649,43 +689,46 @@ const exportPdfForItemSalesReport = (req, res) => {
                                             WHEN uwi.unit = 'KG' THEN 3
                                             ELSE 4
                                           END`;
-        pool.query(sql_querry_getDetails, (err, data) => {
-            if (err) {
-                console.error("An error occurred in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            } else {
-                const result = data.reduce((acc, item) => {
-                    const key = item.subCategoryName;
-                    if (!acc[key]) {
-                        acc[key] = {
-                            items: [],
-                            totalQty: 0, totalRevenue: 0,
-                            totalComplimentaryQty: 0, totalComplimentaryRevenue: 0,
-                            totalCancelQty: 0, totalCancelRevenue: 0
-                        };
-                    }
-                    acc[key].items.push(item);
-                    if (item.soldRevenue !== null) {
-                        acc[key].totalQty += item.soldQty;
-                        acc[key].totalRevenue += item.soldRevenue;
-                        acc[key].totalComplimentaryQty += item.complimentaryQty;
-                        acc[key].totalComplimentaryRevenue += item.complimentaryRevenue;
-                        acc[key].totalCancelQty += item.cancelQty;
-                        acc[key].totalCancelRevenue += item.cancelRevenue;
-                    }
-                    return acc;
-                }, {});
-                createPDF(res, result)
-                    .then(() => {
-                        console.log('PDF created successfully');
-                        res.status(200);
-                    })
-                    .catch((err) => {
-                        console.log(err);
-                        res.status(500).send('Error creating PDF');
-                    });
-            }
-        })
+            pool.query(sql_querry_getDetails, (err, data) => {
+                if (err) {
+                    console.error("An error occurred in SQL Queery", err);
+                    return res.status(500).send('Database Error');
+                } else {
+                    const result = data.reduce((acc, item) => {
+                        const key = item.subCategoryName;
+                        if (!acc[key]) {
+                            acc[key] = {
+                                items: [],
+                                totalQty: 0, totalRevenue: 0,
+                                totalComplimentaryQty: 0, totalComplimentaryRevenue: 0,
+                                totalCancelQty: 0, totalCancelRevenue: 0
+                            };
+                        }
+                        acc[key].items.push(item);
+                        if (item.soldRevenue !== null) {
+                            acc[key].totalQty += item.soldQty;
+                            acc[key].totalRevenue += item.soldRevenue;
+                            acc[key].totalComplimentaryQty += item.complimentaryQty;
+                            acc[key].totalComplimentaryRevenue += item.complimentaryRevenue;
+                            acc[key].totalCancelQty += item.cancelQty;
+                            acc[key].totalCancelRevenue += item.cancelRevenue;
+                        }
+                        return acc;
+                    }, {});
+                    createPDF(res, result)
+                        .then(() => {
+                            console.log('PDF created successfully');
+                            res.status(200);
+                        })
+                        .catch((err) => {
+                            console.log(err);
+                            res.status(500).send('Error creating PDF');
+                        });
+                }
+            })
+        } else {
+            return res.status(400).send('Please Login First....!');
+        }
     } catch (error) {
         console.error('An error occurred', error);
         res.status(500).send('Internal Server Error');
@@ -753,9 +796,15 @@ const updateItemPriceByMenuId = (req, res) => {
 
 const getItmeDataForTouchView = (req, res) => {
     try {
-        const menuId = req.query.menuId ? req.query.menuId : 'base_2001';
-        const searchWord = req.query.searchWord ? req.query.searchWord : '';
-        const sql_query_staticQuery = `SELECT
+        let token;
+        token = req.headers && req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded.id.branchId;
+
+            const menuId = req.query.menuId ? req.query.menuId : 'base_2001';
+            const searchWord = req.query.searchWord ? req.query.searchWord : '';
+            const sql_query_staticQuery = `SELECT
                                            imd.itemId AS itemId,
                                            imd.itemName AS itemName,
                                            imd.itemGujaratiName AS itemGujaratiName,
@@ -767,82 +816,85 @@ const getItmeDataForTouchView = (req, res) => {
                                            imd.spicyLevel AS spicyLevel,
                                            imd.isJain AS isJain,
                                            imd.isPureJain AS isPureJain,
-                                           imd.itemDescription AS itemDescription,
-                                           imd.isFavourite AS isFavourite
+                                           imd.itemDescription AS itemDescription
                                        FROM
                                            item_menuList_data AS imd
                                        INNER JOIN item_subCategory_data AS iscd ON iscd.subCategoryId = imd.itemSubCategory`;
-        let sql_querry_getItem = `${sql_query_staticQuery}
-                                  WHERE imd.itemName LIKE '%` + searchWord + `%'
-                                  ORDER BY iscd.displayRank ASC, imd.itemName ASC;
-                                  ${sql_query_staticQuery}
-                                  WHERE imd.isFavourite = 1
-                                  ORDER BY imd.itemName ASC;`;
-        pool.query(sql_querry_getItem, (err, rows) => {
-            if (err) {
-                console.error("An error occurred in SQL Queery", err);
-                return res.status(500).send('Database Error');
-            } else {
-                const datas = Object.values(JSON.parse(JSON.stringify(rows[0])));
-                if (datas.length) {
-                    varientDatas(datas, menuId)
-                        .then((data) => {
-                            const combinedData = datas.map((item, index) => (
-                                {
-                                    ...item,
-                                    variantsList: data[index].varients,
-                                    allVariantsList: data[index].allVariantsList,
-                                    periods: data[index].periods,
-                                    status: data[index].status
-                                }
-                            ))
-
-                            const favouritesData = Object.values(JSON.parse(JSON.stringify(rows[1])));
-                            varientDatas(favouritesData, menuId)
-                                .then((fdata) => {
-                                    const favouriteCombinedData = favouritesData.map((item, index) => (
-                                        {
-                                            ...item,
-                                            variantsList: fdata[index].varients,
-                                            allVariantsList: fdata[index].allVariantsList,
-                                            periods: fdata[index].periods,
-                                            status: fdata[index].status
-                                        }
-                                    ))
-
-                                    const result = combinedData.reduce((acc, item) => {
-                                        const key = item.subCategoryName;
-                                        if (!acc[key]) {
-                                            acc[key] = [];
-                                        }
-                                        acc[key].push(item);
-                                        return acc;
-                                    }, {});
-                                    let categoryArray = Object.keys(result)
-                                    if (!searchWord) {
-                                        categoryArray.unshift('Favourite Items',);
-                                    }
-                                    const newJson = {
-                                        categoryList: categoryArray,
-                                        itemList: searchWord ? result : {
-                                            'Favourite Items': favouriteCombinedData,
-                                            ...result
-                                        }
-                                    }
-                                    return res.status(200).send(newJson);
-                                }).catch(error => {
-                                    console.error('Error in processing datas :', error);
-                                    return res.status(500).send('Internal Error');
-                                });
-                        }).catch(error => {
-                            console.error('Error in processing datas :', error);
-                            return res.status(500).send('Internal Error');
-                        });
+            let sql_querry_getItem = `${sql_query_staticQuery}
+                                      WHERE imd.itemName LIKE '%` + searchWord + `%'
+                                      ORDER BY iscd.displayRank ASC, imd.itemName ASC;
+                                      ${sql_query_staticQuery}
+                                      INNER JOIN item_branchWiseFavourite_data AS ibf ON ibf.itemId = imd.itemId AND ibf.branchId = '${branchId}'
+                                      ORDER BY ibf.displayRank ASC, imd.itemName ASC`;
+            pool.query(sql_querry_getItem, (err, rows) => {
+                if (err) {
+                    console.error("An error occurred in SQL Queery", err);
+                    return res.status(500).send('Database Error');
                 } else {
-                    return res.status(400).send('No Data Found');
+                    const datas = Object.values(JSON.parse(JSON.stringify(rows[0])));
+                    if (datas.length) {
+                        varientDatas(datas, menuId)
+                            .then((data) => {
+                                const combinedData = datas.map((item, index) => (
+                                    {
+                                        ...item,
+                                        variantsList: data[index].varients,
+                                        allVariantsList: data[index].allVariantsList,
+                                        periods: data[index].periods,
+                                        status: data[index].status
+                                    }
+                                ))
+
+                                const favouritesData = Object.values(JSON.parse(JSON.stringify(rows[1])));
+                                varientDatas(favouritesData, menuId)
+                                    .then((fdata) => {
+                                        const favouriteCombinedData = favouritesData.map((item, index) => (
+                                            {
+                                                ...item,
+                                                variantsList: fdata[index].varients,
+                                                allVariantsList: fdata[index].allVariantsList,
+                                                periods: fdata[index].periods,
+                                                status: fdata[index].status
+                                            }
+                                        ))
+
+                                        const result = combinedData.reduce((acc, item) => {
+                                            const key = item.subCategoryName;
+                                            if (!acc[key]) {
+                                                acc[key] = [];
+                                            }
+                                            acc[key].push(item);
+                                            return acc;
+                                        }, {});
+                                        let categoryArray = Object.keys(result)
+                                        if (!searchWord) {
+                                            favouriteCombinedData.length !== 0 ? categoryArray.unshift('Favourite Items',) : '';
+                                        }
+
+                                        const newJson = {
+                                            categoryList: categoryArray,
+                                            itemList: searchWord ? result : {
+                                                'Favourite Items': favouriteCombinedData,
+                                                ...result
+                                            }
+                                        }
+                                        return res.status(200).send(newJson);
+                                    }).catch(error => {
+                                        console.error('Error in processing datas :', error);
+                                        return res.status(500).send('Internal Error');
+                                    });
+                            }).catch(error => {
+                                console.error('Error in processing datas :', error);
+                                return res.status(500).send('Internal Error');
+                            });
+                    } else {
+                        return res.status(400).send('No Data Found');
+                    }
                 }
-            }
-        })
+            })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurred', error);
         res.status(500).json('Internal Server Error');
@@ -910,54 +962,127 @@ const getItemDataByCode = (req, res) => {
     }
 }
 
-// Get Item Data
+// Add to Favourite By Branch
 
-const getItemForYourName = (req, res) => {
+const addFavouritemByBranch = (req, res) => {
     try {
-        let sql_query_getData = `SELECT
-                                     uwp.uwpId AS uwpId,
-                                     uwp.itemId AS itemId,
-                                     scd.subCategoryName AS subCategoryName, 
-                                     CONCAT(imld.itemName, ' (', uwp.unit, ')') AS itemName,
-                                     uwp.preferredName AS preferredName
-                                 FROM
-                                     item_unitWisePrice_data AS uwp
-                                 LEFT JOIN item_menuList_data AS imld ON imld.itemId = uwp.itemId
-                                 LEFT JOIN item_subCategory_data AS scd ON scd.subCategoryId = imld.itemSubCategory
-                                 WHERE menuCategoryId = 'base_2001'
-                                 ORDER BY imld.itemName ASC, FIELD(unit, 'No', '100 Gm', '250 Gm', '500 Gm', '750 Gm','1 Kg')`;
-        pool.query(sql_query_getData, (err, data) => {
-            if (err) {
-                console.error("An error occurred in SQL Queery", err);
-                return res.status(500).send('Database Error');
+        let token;
+        token = req.headers && req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded.id.branchId;
+            const uid1 = new Date();
+            const favouriteId = String("favourite_" + uid1.getTime());
+            const itemId = req.body.itemId ? req.body.itemId : null;
+            const isFavourite = req.body.isFavourite ? req.body.isFavourite : false;
+
+            if (!branchId) {
+                return res.status(400).send("branchId Not Found");
+            } else if (!itemId) {
+                return res.status(400).send("itemId Not Found");
             } else {
-                return res.status(200).send(data);
+                const sql_query_existData = `SELECT itemId FROM item_branchWiseFavourite_data WHERE itemId = '${itemId}' AND branchId = '${branchId}'`;
+                pool.query(sql_query_existData, (err, row) => {
+                    if (err) {
+                        console.error("An error occurred in SQL Queery", err);
+                        return res.status(500).send('Database Error');
+                    } else {
+                        if ((row && !row.length) && !isFavourite) {
+                            return res.status(400).send(`Item Not Exist..!`);
+                        } else if ((row && row.length) && isFavourite) {
+                            return res.status(400).send(`Item is Already In Favourite`);
+                        } else {
+                            const sql_querry_addFavourite = `INSERT INTO item_branchWiseFavourite_data (favouriteId, branchId, itemId, displayRank)
+                                                             SELECT '${favouriteId}', '${branchId}', '${itemId}', COALESCE(MAX(displayRank), 0) + 1 FROM item_branchWiseFavourite_data WHERE branchId = '${branchId}'`;
+                            const sql_query_removeFavourite = `DELETE FROM item_branchWiseFavourite_data WHERE itemId = '${itemId}' AND branchId = '${branchId}'`;
+                            pool.query(isFavourite ? sql_querry_addFavourite : sql_query_removeFavourite, (err, data) => {
+                                if (err) {
+                                    console.error("An error occurred in SQL Queery", err);
+                                    return res.status(500).send('Database Error');
+                                } else {
+                                    return res.status(200).send(isFavourite ? `Item added to your Favourites!` : `Item removed to your Favourites!`);
+                                }
+                            })
+                        }
+                    }
+                })
             }
-        })
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
     } catch (error) {
         console.error('An error occurred', error);
         res.status(500).json('Internal Server Error');
     }
 }
 
-// Update 
+// Get Favourite Item Data By Branch
 
-const updatePreeferdname = (req, res) => {
+const getFavouriteItemByBranch = (req, res) => {
     try {
-        const uwpId = req.query.uwpId ? req.query.uwpId : null;
-        const preferredName = req.query.preferredName ? req.query.preferredName : null;
-        if (!uwpId || !preferredName) {
-            return res.status(404).send('Please Fill All The Fields');
-        } else {
-            let sql_query_updatePname = `UPDATE item_unitWisePrice_data SET preferredName = ${preferredName} WHERE uwpId = ${uwpId}`;
-            pool.query(sql_query_updatePname, (err, data) => {
+        let token;
+        token = req.headers && req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded.id.branchId;
+
+            const sql_query_updateRank = `SELECT
+                                              bwf.favouriteId AS favouriteId,
+                                              bwf.itemId AS itemId,
+                                              bwf.displayRank AS displayRank,
+                                              imd.itemName AS itemName
+                                          FROM
+                                              item_branchWiseFavourite_data bwf
+                                              LEFT JOIN item_menuList_data imd ON imd.itemId = bwf.itemId
+                                          WHERE branchId = '${branchId}'
+                                          ORDER BY bwf.displayRank ASC`;
+
+            pool.query(sql_query_updateRank, (err, data) => {
                 if (err) {
-                    console.error("An error occurred in SQL Queery", err);
+                    console.error("SQL Error", err);
                     return res.status(500).send('Database Error');
                 } else {
-                    return res.status(200).send("Updated Successs");
+                    return res.status(200).send(data);
                 }
-            })
+            });
+        } else {
+            return res.status(404).send('Please Login First...!');
+        }
+    } catch (error) {
+        console.error('An error occurred', error);
+        res.status(500).json('Internal Server Error');
+    }
+}
+
+// Reorder Favourite Item By Branch
+
+const reorderFavouriteItemByBranch = (req, res) => {
+    try {
+        let token;
+        token = req.headers && req.headers.authorization ? req.headers.authorization.split(" ")[1] : null;
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const branchId = decoded.id.branchId;
+            const data = req.body;
+            if (!branchId || !data || !data.length) {
+                return res.status(400).send('Please Fill All The Fields...!');
+            } else {
+                const sql_query_updateRank = `UPDATE item_branchWiseFavourite_data
+                                              SET displayRank = CASE favouriteId
+                                              ${data.map(item => `WHEN '${item.favouriteId}' THEN ${item.displayRank}`).join('\n')} END
+                                              WHERE branchId = '${branchId}'
+                                              AND favouriteId IN (${data.map(item => `'${item.favouriteId}'`).join(', ')})`;
+
+                pool.query(sql_query_updateRank, (err) => {
+                    if (err) {
+                        console.error("SQL Error", err);
+                        return res.status(500).send('Database Error');
+                    }
+                    return res.status(200).send('Success');
+                });
+            }
+        } else {
+            return res.status(404).send('Please Login First...!');
         }
     } catch (error) {
         console.error('An error occurred', error);
@@ -977,6 +1102,7 @@ module.exports = {
     exportPdfForItemSalesReport,
     getItmeDataForTouchView,
     getItemDataByCode,
-    getItemForYourName,
-    updatePreeferdname
+    addFavouritemByBranch,
+    reorderFavouriteItemByBranch,
+    getFavouriteItemByBranch
 }

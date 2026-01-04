@@ -1022,9 +1022,6 @@ const getManufactureProductTable = (req, res) => {
                                 console.error("An error occurd in SQL Queery", err);
                                 return res.status(500).send('Database Error');;
                             } else {
-                                console.log(rows);
-                                console.log(numRows);
-                                console.log("Total Page :-", numPages);
                                 if (numRows === 0) {
                                     const rows = [{
                                         'msg': 'No Data Found'
@@ -1564,9 +1561,6 @@ const getOutCategoryWiseMfProductData = (req, res) => {
                                 console.error("An error occurd in SQL Queery", err);
                                 return res.status(500).send('Database Error');;
                             } else {
-                                console.log(rows);
-                                console.log(numRows);
-                                console.log("Total Page :-", numPages);
                                 if (numRows === 0) {
                                     const rows = [{
                                         'msg': 'No Data Found'
@@ -2129,6 +2123,7 @@ const exportExcelSheetForMfProduct = (req, res) => {
                                             p.isExpired,
                                             CONCAT(p.expiredDays,' ','Day') AS expiredDays,
                                             COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS remainingStock,
+                                            COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS OnlyremainingStock,
                                             COALESCE(ROUND(siLu.mfProductPrice,2), 0) AS lastPrice,
                                             COALESCE(siLu.mfProductQty,'No In') AS lastUpdatedQty,
                                             COALESCE(siLu.totalPrice, 0) AS totalPrice,
@@ -2202,6 +2197,7 @@ const exportExcelSheetForMfProduct = (req, res) => {
                                             COALESCE(somw.totalStockOutPrice,0) AS totalStockOutPrice,
                                             COALESCE(si.total_siPrice, 0) - COALESCE(so.total_soPrice, 0) AS remainPrice,
                                             COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS remainingStock,
+                                            COALESCE(si.total_quantity, 0) - COALESCE(so.total_quantity, 0) AS OnlyremainingStock,
                                             COALESCE(ROUND(siLu.mfProductPrice,2), 0) AS lastPrice,
                                             COALESCE(siLu.mfProductQty,'No In') AS lastUpdatedQty,
                                             COALESCE(siLu.totalPrice, 0) AS totalPrice,
@@ -2403,7 +2399,7 @@ const exportExcelSheetForMfProduct = (req, res) => {
                                     worksheet.getCell('A1').value = `Product List From ${firstDay} To ${lastDay}`;
                                 }
 
-                                const headersNameList = ['S no.', 'Product Name', 'પ્રોડક્ટ નામ', 'Total StockIn', 'Total Expense', 'Total Used', 'Total Used Price', 'Remaining Stock', 'Remaining Price', 'Last StockIn', 'Last Price', 'Last Updated Price', 'Min Product Qty', 'Stock Status', 'LastIn DATE'];
+                                const headersNameList = ['S no.', 'Product Name', 'પ્રોડક્ટ નામ', 'Total StockIn', 'Total Expense', 'Total Used', 'Total Used Price', 'Remaining Stock', 'Only Min Remaining Stock', 'Remaining Price', 'Last StockIn', 'Last Price', 'Last Updated Price', 'Min Product Qty', 'Stock Status', 'LastIn DATE'];
                                 const columnsArray = [
                                     { key: "s_no", width: 10, },
                                     { key: "mfProductName", width: 30 },
@@ -2413,6 +2409,7 @@ const exportExcelSheetForMfProduct = (req, res) => {
                                     { key: "totalUsed", width: 40 },
                                     { key: "totalStockOutPrice", width: 20 },
                                     { key: "remainingStock", width: 40 },
+                                    { key: "OnlyremainingStock", width: 40 },
                                     { key: "remainPrice", width: 20 },
                                     { key: "lastUpdatedQty", width: 20 },
                                     { key: "totalPrice", width: 20 },
